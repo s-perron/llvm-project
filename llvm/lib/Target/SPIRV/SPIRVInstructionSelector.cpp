@@ -44,6 +44,18 @@ using ExtInstList =
 
 namespace {
 
+uint64_t getUnsignedConstantValueFromReg(llvm::Register reg,
+                                         const llvm::MachineRegisterInfo &MRI) {
+  llvm::SPIRVType *ConstTy = MRI.getVRegDef(reg);
+  assert(ConstTy && ConstTy->getOpcode() == llvm::SPIRV::ASSIGN_TYPE &&
+         ConstTy->getOperand(1).isReg());
+  llvm::Register ConstReg = ConstTy->getOperand(1).getReg();
+  const llvm::MachineInstr *Const = MRI.getVRegDef(ConstReg);
+  assert(Const && Const->getOpcode() == llvm::TargetOpcode::G_CONSTANT);
+  const llvm::APInt &Val = Const->getOperand(1).getCImm()->getValue();
+  return Val.getZExtValue();
+}
+
 #define GET_GLOBALISEL_PREDICATE_BITSET
 #include "SPIRVGenGlobalISel.inc"
 #undef GET_GLOBALISEL_PREDICATE_BITSET
@@ -1644,8 +1656,8 @@ bool SPIRVInstructionSelector::selectLength(Register ResVReg,
 }
 
 bool SPIRVInstructionSelector::selectFrac(Register ResVReg,
-                                           const SPIRVType *ResType,
-                                           MachineInstr &I) const {
+                                          const SPIRVType *ResType,
+                                          MachineInstr &I) const {
 
   assert(I.getNumOperands() == 3);
   assert(I.getOperand(2).isReg());
@@ -2665,6 +2677,35 @@ bool SPIRVInstructionSelector::selectIntrinsic(Register ResVReg,
   // Discard internal intrinsics.
   case Intrinsic::spv_value_md:
     break;
+  case Intrinsic::spv_image_fromBinding: {
+    MachineIRBuilder MIRBuilder(I);
+
+    uint32_t arraySize =
+        getUnsignedConstantValueFromReg(I.getOperand(4).getReg(), *MRI);
+    assert(arraySize == 1 && "Resource arrays are no implemented yet.");
+
+    SPIRVType *pointerTypeReg = GR.getOrCreateSPIRVPointerType(
+        ResType, MIRBuilder, llvm::SPIRV::StorageClass::UniformConstant);
+    Register VarReg = MRI->createVirtualRegister(&SPIRV::iIDRegClass);
+    GR.buildGlobalVariable(VarReg, pointerTypeReg, "", nullptr,
+                           llvm::SPIRV::StorageClass::UniformConstant, nullptr,
+                           false, false, SPIRV::LinkageType::Import, MIRBuilder,
+                           false);
+
+    uint32_t set =
+        getUnsignedConstantValueFromReg(I.getOperand(2).getReg(), *MRI);
+    buildOpDecorate(VarReg, I, TII, SPIRV::Decoration::DescriptorSet, {set});
+
+    uint32_t binding =
+        getUnsignedConstantValueFromReg(I.getOperand(3).getReg(), *MRI);
+    buildOpDecorate(VarReg, I, TII, SPIRV::Decoration::Binding, {binding});
+
+    BuildMI(BB, I, I.getDebugLoc(), TII.get(SPIRV::OpLoad))
+        .addDef(ResVReg)
+        .addUse(GR.getSPIRVTypeID(ResType))
+        .addUse(VarReg);
+    return true;
+  }
   default: {
     std::string DiagMsg;
     raw_string_ostream OS(DiagMsg);

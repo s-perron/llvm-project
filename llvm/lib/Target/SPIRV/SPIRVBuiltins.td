@@ -114,6 +114,7 @@ def : DemangledBuiltin<"write_imageh", OpenCL_std, WriteImage, 3, 4>;
 def : DemangledBuiltin<"__translate_sampler_initializer", OpenCL_std, SampleImage, 1, 1>;
 def : DemangledBuiltin<"__spirv_SampledImage", OpenCL_std, SampleImage, 2, 2>;
 def : DemangledBuiltin<"__spirv_ImageSampleExplicitLod", OpenCL_std, SampleImage, 3, 4>;
+def : DemangledBuiltin<"__spirv_ImageRead", GLSL_std_450, ReadImage, 2, 2>;
 
 // Select builtin record:
 def : DemangledBuiltin<"__spirv_Select", OpenCL_std, Select, 3, 3>;

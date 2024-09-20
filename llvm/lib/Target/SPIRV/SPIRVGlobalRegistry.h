@@ -549,12 +549,11 @@ public:
       SPIRVType *BaseType, MachineInstr &I, const SPIRVInstrInfo &TII,
       SPIRV::StorageClass::StorageClass SClass = SPIRV::StorageClass::Function);
 
-  SPIRVType *
-  getOrCreateOpTypeImage(MachineIRBuilder &MIRBuilder, SPIRVType *SampledType,
-                         SPIRV::Dim::Dim Dim, uint32_t Depth, uint32_t Arrayed,
-                         uint32_t Multisampled, uint32_t Sampled,
-                         SPIRV::ImageFormat::ImageFormat ImageFormat,
-                         SPIRV::AccessQualifier::AccessQualifier AccQual);
+  SPIRVType *getOrCreateOpTypeImage(
+      MachineIRBuilder &MIRBuilder, SPIRVType *SampledType, SPIRV::Dim::Dim Dim,
+      uint32_t Depth, uint32_t Arrayed, uint32_t Multisampled, uint32_t Sampled,
+      SPIRV::ImageFormat::ImageFormat ImageFormat,
+      std::optional<SPIRV::AccessQualifier::AccessQualifier> AccessQual);
 
   SPIRVType *getOrCreateOpTypeSampler(MachineIRBuilder &MIRBuilder);
 

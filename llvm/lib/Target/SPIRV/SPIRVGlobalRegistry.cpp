@@ -1141,24 +1141,29 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateOpTypeImage(
     MachineIRBuilder &MIRBuilder, SPIRVType *SampledType, SPIRV::Dim::Dim Dim,
     uint32_t Depth, uint32_t Arrayed, uint32_t Multisampled, uint32_t Sampled,
     SPIRV::ImageFormat::ImageFormat ImageFormat,
-    SPIRV::AccessQualifier::AccessQualifier AccessQual) {
-  auto TD = SPIRV::make_descr_image(SPIRVToLLVMType.lookup(SampledType), Dim,
-                                    Depth, Arrayed, Multisampled, Sampled,
-                                    ImageFormat, AccessQual);
+    std::optional<SPIRV::AccessQualifier::AccessQualifier> AccessQual) {
+  auto TD = SPIRV::make_descr_image(
+      SPIRVToLLVMType.lookup(SampledType), Dim, Depth, Arrayed, Multisampled,
+      Sampled, ImageFormat,
+      (AccessQual.has_value() ? AccessQual.value()
+                              : SPIRV::AccessQualifier::None));
   if (auto *Res = checkSpecialInstr(TD, MIRBuilder))
     return Res;
   Register ResVReg = createTypeVReg(MIRBuilder);
   DT.add(TD, &MIRBuilder.getMF(), ResVReg);
-  return MIRBuilder.buildInstr(SPIRV::OpTypeImage)
-      .addDef(ResVReg)
-      .addUse(getSPIRVTypeID(SampledType))
-      .addImm(Dim)
-      .addImm(Depth)        // Depth (whether or not it is a Depth image).
-      .addImm(Arrayed)      // Arrayed.
-      .addImm(Multisampled) // Multisampled (0 = only single-sample).
-      .addImm(Sampled)      // Sampled (0 = usage known at runtime).
-      .addImm(ImageFormat)
-      .addImm(AccessQual);
+  auto MIB = MIRBuilder.buildInstr(SPIRV::OpTypeImage)
+                 .addDef(ResVReg)
+                 .addUse(getSPIRVTypeID(SampledType))
+                 .addImm(Dim)
+                 .addImm(Depth)   // Depth (whether or not it is a Depth image).
+                 .addImm(Arrayed) // Arrayed.
+                 .addImm(Multisampled) // Multisampled (0 = only single-sample).
+                 .addImm(Sampled)      // Sampled (0 = usage known at runtime).
+                 .addImm(ImageFormat);
+
+  if (AccessQual.has_value())
+    MIB.addImm(AccessQual.value());
+  return MIB;
 }
 
 SPIRVType *

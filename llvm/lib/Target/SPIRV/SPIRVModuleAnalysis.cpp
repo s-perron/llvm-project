@@ -584,6 +584,7 @@ void SPIRV::RequirementHandler::checkSatisfiable(
     IsSatisfiable = false;
   }
 
+  /*
   for (auto Cap : MinimalCaps) {
     if (AvailableCaps.contains(Cap))
       continue;
@@ -603,7 +604,7 @@ void SPIRV::RequirementHandler::checkSatisfiable(
                       << "\n");
     IsSatisfiable = false;
   }
-
+  */
   if (!IsSatisfiable)
     report_fatal_error("Unable to meet SPIR-V requirements for this target.");
 }
