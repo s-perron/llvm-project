@@ -52,6 +52,10 @@ public:
 
   unsigned getOpenCLKernelCallingConv() const override;
   llvm::Type *getOpenCLType(CodeGenModule &CGM, const Type *T) const override;
+  llvm::Type *getHLSLType(CodeGenModule &CGM, const Type *Ty) const override;
+  llvm::Type *getSPIRVImageTypeFromHLSLResource(
+      const HLSLAttributedResourceType::Attributes &attributes,
+      llvm::Type *ElementType, llvm::LLVMContext &Ctx) const;
 };
 class SPIRVTargetCodeGenInfo : public CommonSPIRTargetCodeGenInfo {
 public:
@@ -202,8 +206,8 @@ void computeSPIRKernelABIInfo(CodeGenModule &CGM, CGFunctionInfo &FI) {
   else
     CommonSPIRABIInfo(CGM.getTypes()).computeInfo(FI);
 }
-}
-}
+} // namespace CodeGen
+} // namespace clang
 
 unsigned CommonSPIRTargetCodeGenInfo::getOpenCLKernelCallingConv() const {
   return llvm::CallingConv::SPIR_KERNEL;
@@ -298,8 +302,8 @@ llvm::Type *CommonSPIRTargetCodeGenInfo::getOpenCLType(CodeGenModule &CGM,
     enum AccessQualifier : unsigned { AQ_ro = 0, AQ_wo = 1, AQ_rw = 2 };
     switch (BuiltinTy->getKind()) {
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix)                   \
-    case BuiltinType::Id:                                                      \
-      return getSPIRVImageType(Ctx, "spirv.Image", #ImgType, AQ_##Suffix);
+  case BuiltinType::Id:                                                        \
+    return getSPIRVImageType(Ctx, "spirv.Image", #ImgType, AQ_##Suffix);
 #include "clang/Basic/OpenCLImageTypes.def"
     case BuiltinType::OCLSampler:
       return llvm::TargetExtType::get(Ctx, "spirv.Sampler");
@@ -312,8 +316,8 @@ llvm::Type *CommonSPIRTargetCodeGenInfo::getOpenCLType(CodeGenModule &CGM,
     case BuiltinType::OCLReserveID:
       return llvm::TargetExtType::get(Ctx, "spirv.ReserveId");
 #define INTEL_SUBGROUP_AVC_TYPE(Name, Id)                                      \
-    case BuiltinType::OCLIntelSubgroupAVC##Id:                                 \
-      return llvm::TargetExtType::get(Ctx, "spirv.Avc" #Id "INTEL");
+  case BuiltinType::OCLIntelSubgroupAVC##Id:                                   \
+    return llvm::TargetExtType::get(Ctx, "spirv.Avc" #Id "INTEL");
 #include "clang/Basic/OpenCLExtensionTypes.def"
     default:
       return nullptr;
@@ -321,6 +325,74 @@ llvm::Type *CommonSPIRTargetCodeGenInfo::getOpenCLType(CodeGenModule &CGM,
   }
 
   return nullptr;
+}
+
+llvm::Type *CommonSPIRTargetCodeGenInfo::getHLSLType(CodeGenModule &CGM,
+                                                     const Type *Ty) const {
+  auto *ResType = dyn_cast<HLSLAttributedResourceType>(Ty);
+  if (!ResType)
+    return nullptr;
+
+  llvm::LLVMContext &Ctx = CGM.getLLVMContext();
+  const HLSLAttributedResourceType::Attributes &ResAttrs = ResType->getAttrs();
+  switch (ResAttrs.ResourceClass) {
+  case llvm::dxil::ResourceClass::UAV:
+  case llvm::dxil::ResourceClass::SRV: {
+    // TypedBuffer and RawBuffer both need element type
+    QualType ContainedTy = ResType->getContainedType();
+    if (ContainedTy.isNull())
+      return nullptr;
+
+    assert(!ResAttrs.RawBuffer &&
+        "Raw buffers handles are not implemented for SPIR-V yet");
+
+    // convert element type
+    llvm::Type *ElemType = CGM.getTypes().ConvertType(ContainedTy);
+    return getSPIRVImageTypeFromHLSLResource(ResAttrs, ElemType, Ctx);
+  }
+  case llvm::dxil::ResourceClass::CBuffer:
+    llvm_unreachable("CBuffer handles are not implemented for SPIR-V yet");
+    break;
+  case llvm::dxil::ResourceClass::Sampler:
+    return llvm::TargetExtType::get(Ctx, "spirv.Sampler");
+  }
+  return nullptr;
+}
+
+llvm::Type *CommonSPIRTargetCodeGenInfo::getSPIRVImageTypeFromHLSLResource(
+    const HLSLAttributedResourceType::Attributes &attributes,
+    llvm::Type *ElementType, llvm::LLVMContext &Ctx) const {
+  // For HLSL types, the depth is always 2.
+  SmallVector<unsigned, 6> IntParams = {0, 2, 0, 0, 1, 0};
+
+  // Dim
+  // For now we assume everything is a buffer.
+  // TODO: This needs to be set based on the 
+  IntParams[0] = 5;
+
+  // Depth
+  // HLSL does not indicate if it is a depth texture or not, so we use unknown.
+  IntParams[1] = 2;
+
+  // Arrayed
+  IntParams[2] = 0;
+
+  // MS
+  IntParams[3] = 0;
+
+  // Sampled
+  IntParams[4] = attributes.IsROV ? 1 : 2;
+
+  // Image format.
+  // Defaulting to unknown.
+  // Add the vk::image_format to set this.
+  // TODO: In DXC, we tried to infer the format based on the element type.
+  // This caused problems for some people. We should reevaluate if we should
+  // follow the DXC or go with the requested behaviour. If we do change the
+  // behaviour from DXC, we should make this a HLSL202X change in DXC.
+  IntParams[5] = 0;
+
+  return llvm::TargetExtType::get(Ctx, "spirv.Image", {ElementType}, IntParams);
 }
 
 std::unique_ptr<TargetCodeGenInfo>
