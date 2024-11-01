@@ -15,6 +15,7 @@
 #include "SPIRVBaseInfo.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/Twine.h"
 
 namespace llvm {
 namespace SPIRV {
@@ -223,7 +224,7 @@ std::string getExtInstName(SPIRV::InstructionSet::InstructionSet Set,
       SPIRV::lookupExtendedBuiltinBySetAndNumber(Set, InstructionNumber);
 
   if (!Lookup)
-    return "UNKNOWN_EXT_INST";
+    return ("!" + Twine(InstructionNumber)).str();
 
   return Lookup->Name.str();
 }

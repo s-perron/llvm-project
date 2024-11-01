@@ -586,6 +586,37 @@ bool SPIRVCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
       return *Res;
   }
 
+  if (isFunctionDecl && cast<Function>(Info.Callee.getGlobal())->hasFnAttribute("spv.ext_instruction")) {
+    Attribute Attr = cast<Function>(Info.Callee.getGlobal())->getFnAttribute("spv.ext_instruction");
+    StringRef AttrString =Attr.getValueAsString();
+    uint32_t Opcode = 0;
+    AttrString.consumeInteger(10, Opcode);
+    AttrString.consume_front(",");
+    SPIRVType *RetType = GR->assignTypeToVReg(OrigRetTy, ResVReg, MIRBuilder);
+    MachineInstrBuilder MIB;
+    if (AttrString.empty()) {
+      // TODO: Find opcode in known opcodes if possible.
+      MIB = MIRBuilder.buildInstr(SPIRV::UNKNOWN_instruction)
+          .addDef(ResVReg)
+          .addUse(GR->getSPIRVTypeID(RetType))
+          .addImm(Opcode);
+    } else {
+      MIB = MIRBuilder.buildInstr(SPIRV::OpExtInst)
+          .addDef(ResVReg)
+          .addUse(GR->getSPIRVTypeID(RetType))
+          .addImm(getExtInstSetFromString(AttrString.str()))
+          .addImm(Opcode);
+    }
+    for (const auto &Arg : Info.OrigArgs) {
+      // Currently call args should have single vregs.
+      if (Arg.Regs.size() > 1)
+        return false;
+      MIB.addUse(Arg.Regs[0]);
+    }
+
+    return MIB.constrainAllUses(MIRBuilder.getTII(), *ST->getRegisterInfo(), *ST->getRegBankInfo());
+  }
+
   if (isFunctionDecl && !GR->find(CF, &MF).isValid()) {
     // Emit the type info and forward function declaration to the first MBB
     // to ensure VReg definition dependencies are valid across all MBBs.
