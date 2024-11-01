@@ -57,6 +57,11 @@ let TargetPrefix = "spv" in {
                                 NoCapture<ArgIndex<1>>,
                                 ImmArg<ArgIndex<0>>]>;
 
+
+  // A generic builtin to represent a SPIR-V instruction. The first input operand is the opcode.
+  // The rest of the operands must match expected operands for the SPIR-V instruction.
+  def int_spv_instruction : DefaultAttrsIntrinsic<[llvm_any_ty], [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty]>;
+
   // The following intrinsic(s) are mirrored from IntrinsicsDirectX.td for HLSL support.
   def int_spv_thread_id : Intrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrNoMem, IntrWillReturn]>;
   def int_spv_all : DefaultAttrsIntrinsic<[llvm_i1_ty], [llvm_any_ty], [IntrNoMem]>;

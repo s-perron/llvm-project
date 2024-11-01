@@ -22,6 +22,7 @@ using namespace llvm;
 
 void SPIRVMCInstLower::lower(const MachineInstr *MI, MCInst &OutMI,
                              SPIRV::ModuleAnalysisInfo *MAI) const {
+  // TODO(Steven): Add lowing for a new psuedo instruction.
   OutMI.setOpcode(MI->getOpcode());
   // Propagate previously set flags
   OutMI.setFlags(MI->getAsmPrinterFlags());

@@ -270,6 +270,8 @@ private:
 
   bool selectHandleFromBinding(Register &ResVReg, const SPIRVType *ResType,
                                MachineInstr &I) const;
+  void selectSpirvInstruction(Register &ResVReg, const SPIRVType *ResType,
+                              MachineInstr &I) const;
 
   void selectReadImageIntrinsic(Register &ResVReg, const SPIRVType *ResType,
                                 MachineInstr &I) const;
@@ -2891,6 +2893,10 @@ bool SPIRVInstructionSelector::selectIntrinsic(Register ResVReg,
   case Intrinsic::spv_discard: {
     return selectDiscard(ResVReg, ResType, I);
   }
+  case Intrinsic::spv_instruction: {
+    selectSpirvInstruction(ResVReg, ResType, I);
+    return true;
+  }
   default: {
     std::string DiagMsg;
     raw_string_ostream OS(DiagMsg);
@@ -2900,6 +2906,23 @@ bool SPIRVInstructionSelector::selectIntrinsic(Register ResVReg,
   }
   }
   return true;
+}
+
+void SPIRVInstructionSelector::selectSpirvInstruction(Register &ResVReg,
+                                                      const SPIRVType *ResType,
+                                                      MachineInstr &I) const {
+
+  uint32_t OpCode = foldImm(I.getOperand(2), MRI);
+  MachineInstrBuilder MIB = BuildMI(*I.getParent(), I, I.getDebugLoc(),
+                                    TII.get(SPIRV::UNKNOWN_instruction))
+                                .addDef(ResVReg)
+                                .addUse(GR.getSPIRVTypeID(ResType))
+                                .addImm(OpCode);
+
+  // TODO: Need to immediate operands properly.
+  for (uint32_t Idx = 3; Idx < I.getNumOperands(); ++Idx) {
+    MIB->addOperand(I.getOperand(Idx));
+  }
 }
 
 bool SPIRVInstructionSelector::selectHandleFromBinding(Register &ResVReg,
