@@ -46,6 +46,10 @@ public:
   void encodeInstruction(const MCInst &MI, SmallVectorImpl<char> &CB,
                          SmallVectorImpl<MCFixup> &Fixups,
                          const MCSubtargetInfo &STI) const override;
+  void encodeUnknownInstruction(const MCInst &inst,
+                                SmallVectorImpl<char> &vector,
+                                SmallVectorImpl<MCFixup> &vector_1,
+                                const MCSubtargetInfo &info) const;
 };
 
 } // end anonymous namespace
@@ -105,10 +109,34 @@ static void emitUntypedInstrOperands(const MCInst &MI,
     emitOperand(Op, CB);
 }
 
+void SPIRVMCCodeEmitter::encodeUnknownInstruction(
+    const MCInst &MI, SmallVectorImpl<char> &CB,
+    SmallVectorImpl<MCFixup> &Fixups, const MCSubtargetInfo &STI) const {
+  // Encode the first 32 SPIR-V bytes with the number of args and the opcode.
+
+  const uint64_t OpCode = MI.getOperand(2).getImm();
+  const uint32_t NumWords =
+      MI.getNumOperands() + 1 -
+      1; // The opcode is not an operand, so we need to substract 1.
+  const uint32_t FirstWord = (NumWords << 16) | OpCode;
+  support::endian::write(CB, FirstWord, llvm::endianness::little);
+
+  unsigned NumOps = MI.getNumOperands();
+  emitOperand(MI.getOperand(1), CB);
+  emitOperand(MI.getOperand(0), CB);
+  for (unsigned i = 3; i < NumOps; ++i)
+    emitOperand(MI.getOperand(i), CB);
+}
+
 void SPIRVMCCodeEmitter::encodeInstruction(const MCInst &MI,
                                            SmallVectorImpl<char> &CB,
                                            SmallVectorImpl<MCFixup> &Fixups,
                                            const MCSubtargetInfo &STI) const {
+  if (MI.getOpcode() == SPIRV::UNKNOWN_instruction) {
+    encodeUnknownInstruction(MI, CB, Fixups, STI);
+    return;
+  }
+
   // Encode the first 32 SPIR-V bytes with the number of args and the opcode.
   const uint64_t OpCode = getBinaryCodeForInstr(MI, Fixups, STI);
   const uint32_t NumWords = MI.getNumOperands() + 1;
