@@ -7787,6 +7787,16 @@ and https://microsoft.github.io/hlsl-specs/proposals/0013-wave-size-range.html
   }];
 }
 
+def VkExtInstructionDocs : Documentation {
+  let Category = DocCatFunction;
+  let Content = [{
+The ``vk::ext_instruction`` attribute indicates that the function to which it
+applies is defined by a single SPIR-V instruction with the given opcode.
+
+The full documentation is available here: https://microsoft.github.io/hlsl-specs/proposals/0011-inline-spirv.html#instructions-and-extended-instructions.
+  }];
+}
+
 def NumThreadsDocs : Documentation {
   let Category = DocCatFunction;
   let Content = [{

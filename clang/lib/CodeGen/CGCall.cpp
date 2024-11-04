@@ -40,6 +40,8 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Type.h"
+#include "llvm/Support/FormatVariadic.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Transforms/Utils/Local.h"
 #include <optional>
 using namespace clang;
@@ -2479,6 +2481,14 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
 
     if (TargetDecl->hasAttr<ArmLocallyStreamingAttr>())
       FuncAttrs.addAttribute("aarch64_pstate_sm_body");
+
+    if (!AttrOnCallSite) {
+      if (auto *Attr = TargetDecl->getAttr<HLSLVkExtInstructionAttr>()) {
+        std::string ExtInstructionInfo = llvm::formatv(
+            "{0},{1}", Attr->getOpcode(), Attr->getInstruction_set());
+        FuncAttrs.addAttribute("spv.ext_instruction", ExtInstructionInfo);
+      }
+    }
   }
 
   // Attach "no-builtins" attributes to:

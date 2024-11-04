@@ -1016,6 +1016,19 @@ bool SemaHLSL::handleResourceTypeAttr(QualType T, const ParsedAttr &AL) {
   return true;
 }
 
+void SemaHLSL::handleVkExtInstructionAttr(Decl *D, const ParsedAttr &AL) {
+  uint32_t Opcode = 0;
+  if (!SemaRef.checkUInt32Argument(AL, AL.getArgAsExpr(0), Opcode))
+    return;
+
+  StringRef InstructionSet = "";
+  if (AL.getNumArgs() > 1 && !SemaRef.checkStringLiteralArgumentAttr(AL, 1, InstructionSet))
+    return;
+
+  auto *NewAttr = HLSLVkExtInstructionAttr::Create(getASTContext(), Opcode, InstructionSet, AL.getLoc());
+  D->addAttr(NewAttr);
+}
+
 // Combines all resource type attributes and creates HLSLAttributedResourceType.
 QualType SemaHLSL::ProcessResourceTypeAttributes(QualType CurrentType) {
   if (!HLSLResourcesTypeAttrs.size())
