@@ -1022,10 +1022,34 @@ void SemaHLSL::handleVkExtInstructionAttr(Decl *D, const ParsedAttr &AL) {
     return;
 
   StringRef InstructionSet = "";
-  if (AL.getNumArgs() > 1 && !SemaRef.checkStringLiteralArgumentAttr(AL, 1, InstructionSet))
+  if (AL.getNumArgs() > 1 &&
+      !SemaRef.checkStringLiteralArgumentAttr(AL, 1, InstructionSet))
     return;
 
-  auto *NewAttr = HLSLVkExtInstructionAttr::Create(getASTContext(), Opcode, InstructionSet, AL.getLoc());
+  auto *NewAttr = HLSLVkExtInstructionAttr::Create(getASTContext(), Opcode,
+                                                   InstructionSet, AL.getLoc());
+  D->addAttr(NewAttr);
+}
+
+void SemaHLSL::handleVkExtCapabilityAttr(Decl *D, const ParsedAttr &AL) {
+  // TODO: Check that D is an entry point or has ext_instruction attribute.
+  uint32_t Capability = 0;
+  if (!SemaRef.checkUInt32Argument(AL, AL.getArgAsExpr(0), Capability))
+    return;
+
+  auto *NewAttr =
+      HLSLVkExtCapabilityAttr::Create(getASTContext(), Capability, AL.getLoc());
+  D->addAttr(NewAttr);
+}
+
+void SemaHLSL::handleVkExtExtensionAttr(Decl *D, const ParsedAttr &AL) {
+  // TODO: Check that D is an entry point or has ext_instruction attribute.
+  StringRef Name;
+  if (!SemaRef.checkStringLiteralArgumentAttr(AL, 0, Name))
+    return;
+
+  auto *NewAttr =
+      HLSLVkExtExtensionAttr::Create(getASTContext(), Name, AL.getLoc());
   D->addAttr(NewAttr);
 }
 

@@ -360,6 +360,15 @@ void clang::CodeGen::CGHLSLRuntime::setHLSLEntryAttributes(
                 WaveSizeAttr->getPreferred());
     Fn->addFnAttr(WaveSizeKindStr, WaveSizeStr);
   }
+
+  if (auto *Attr = FD->getAttr<HLSLVkExtCapabilityAttr>()) {
+    Fn->addFnAttr("spv.ext_capability", Twine(Attr->getCapability()).str());
+  }
+
+  if (auto *Attr = FD->getAttr<HLSLVkExtExtensionAttr>()) {
+    Fn->addFnAttr("spv.ext_extension", Attr->getName());
+  }
+
   Fn->addFnAttr(llvm::Attribute::NoInline);
 }
 

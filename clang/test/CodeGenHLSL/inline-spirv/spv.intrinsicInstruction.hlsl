@@ -1,6 +1,8 @@
 // RUN: %clang_cc1 -triple spirv-pc-vulkan-compute -emit-llvm -disable-llvm-passes -o - %s | FileCheck %s --enable-var-scope
 
 // CHECK: declare spir_func noundef i64 @_Z9ReadClockj(i32 noundef) #[[#ClockAttr:]]
+[[vk::ext_capability(5055)]]
+[[vk::ext_extension("SPV_KHR_shader_clock")]]
 [[vk::ext_instruction(/* OpReadClockKHR */ 5056)]]
 long ReadClock(unsigned int scope);
 
@@ -14,5 +16,5 @@ void main() {
   float f = spv_sin(0.0);
 }
 
-// CHECK: attributes #[[#ClockAttr]] = { convergent "no-trapping-math"="true" "spv.ext_instruction"="5056," "stack-protector-buffer-size"="8" }
+// CHECK: attributes #[[#ClockAttr]] = { convergent "no-trapping-math"="true" "spv.ext_capability"="5055" "spv.ext_extension"="SPV_KHR_shader_clock" "spv.ext_instruction"="5056," "stack-protector-buffer-size"="8" }
 // CHECK: attributes #[[#SinAttr]] = { convergent "no-trapping-math"="true" "spv.ext_instruction"="13,GLSL.std.450" "stack-protector-buffer-size"="8" }

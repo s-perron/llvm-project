@@ -2487,6 +2487,15 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
         std::string ExtInstructionInfo = llvm::formatv(
             "{0},{1}", Attr->getOpcode(), Attr->getInstruction_set());
         FuncAttrs.addAttribute("spv.ext_instruction", ExtInstructionInfo);
+
+        if (auto *Attr = TargetDecl->getAttr<HLSLVkExtCapabilityAttr>()) {
+          FuncAttrs.addAttribute("spv.ext_capability",
+                                 llvm::Twine(Attr->getCapability()).str());
+        }
+
+        if (auto *Attr = TargetDecl->getAttr<HLSLVkExtExtensionAttr>()) {
+          FuncAttrs.addAttribute("spv.ext_extension", Attr->getName());
+        }
       }
     }
   }
