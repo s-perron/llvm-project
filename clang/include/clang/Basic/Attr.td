@@ -4809,6 +4809,14 @@ def HLSLVkExtInstruction : InheritableAttr {
   let Documentation = [VkExtInstructionDocs];
 }
 
+def HLSLVkSpvExecutionMode : InheritableAttr {
+  let Spellings = [CXX11<"vk", "spvexecutionmode">];
+  let Subjects = SubjectList<[HLSLEntry]>;
+  let Args = [UnsignedArgument<"ExecutionMode">];
+  let LangOpts = [HLSL];
+  let Documentation = [VkSpvExecutionMode];
+}
+
 def RandomizeLayout : InheritableAttr {
   let Spellings = [GCC<"randomize_layout">];
   let Subjects = SubjectList<[Record]>;

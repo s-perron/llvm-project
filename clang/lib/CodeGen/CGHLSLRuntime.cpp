@@ -360,6 +360,19 @@ void clang::CodeGen::CGHLSLRuntime::setHLSLEntryAttributes(
                 WaveSizeAttr->getPreferred());
     Fn->addFnAttr(WaveSizeKindStr, WaveSizeStr);
   }
+
+  if (FD->hasAttr<HLSLVkSpvExecutionModeAttr>()) {
+    const StringRef SpvExecutionModeKindStr = "spv.executionmode";
+    std::string SpvExecutionModeStr;
+    for (auto ExeModeAttr : FD->specific_attrs<HLSLVkSpvExecutionModeAttr>()) {
+      SpvExecutionModeStr +=
+          (Twine(ExeModeAttr->getExecutionMode()) + Twine(',')).str();
+    }
+    // Drop the last ','
+    SpvExecutionModeStr.pop_back();
+    Fn->addFnAttr(SpvExecutionModeKindStr, SpvExecutionModeStr);
+  }
+
   Fn->addFnAttr(llvm::Attribute::NoInline);
 }
 

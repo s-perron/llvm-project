@@ -126,6 +126,7 @@ public:
   void handleParamModifierAttr(Decl *D, const ParsedAttr &AL);
   bool handleResourceTypeAttr(QualType T, const ParsedAttr &AL);
   void handleVkExtInstructionAttr(Decl *T, const ParsedAttr &AL);
+  void handleVkExecutionMode(Decl *T, const ParsedAttr &AL);
 
   bool CheckBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
   QualType ProcessResourceTypeAttributes(QualType Wrapped);

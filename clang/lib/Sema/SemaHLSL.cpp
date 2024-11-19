@@ -1022,10 +1022,22 @@ void SemaHLSL::handleVkExtInstructionAttr(Decl *D, const ParsedAttr &AL) {
     return;
 
   StringRef InstructionSet = "";
-  if (AL.getNumArgs() > 1 && !SemaRef.checkStringLiteralArgumentAttr(AL, 1, InstructionSet))
+  if (AL.getNumArgs() > 1 &&
+      !SemaRef.checkStringLiteralArgumentAttr(AL, 1, InstructionSet))
     return;
 
-  auto *NewAttr = HLSLVkExtInstructionAttr::Create(getASTContext(), Opcode, InstructionSet, AL.getLoc());
+  auto *NewAttr = HLSLVkExtInstructionAttr::Create(getASTContext(), Opcode,
+                                                   InstructionSet, AL.getLoc());
+  D->addAttr(NewAttr);
+}
+
+void SemaHLSL::handleVkExecutionMode(Decl *D, const ParsedAttr &AL) {
+  uint32_t ExeMode = 0;
+  if (!SemaRef.checkUInt32Argument(AL, AL.getArgAsExpr(0), ExeMode))
+    return;
+
+  auto *NewAttr =
+      HLSLVkSpvExecutionModeAttr::Create(getASTContext(), ExeMode, AL.getLoc());
   D->addAttr(NewAttr);
 }
 

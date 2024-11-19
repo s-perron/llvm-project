@@ -7786,6 +7786,16 @@ The full documentation is available here: https://microsoft.github.io/hlsl-specs
   }];
 }
 
+def VkSpvExecutionMode : Documentation {
+  let Category = DocCatFunction;
+  let Content = [{
+The ``vk::spvexecutionmode`` attribute add a SPIR-V execution mode to the entry point.
+
+The full documentation is available here: https://github.com/microsoft/hlsl-specs/blob/main/proposals/0011-inline-spirv.md#execution-modes.
+The list of execution modes can be found at https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#Execution_Mode.
+  }];
+}
+
 def NumThreadsDocs : Documentation {
   let Category = DocCatFunction;
   let Content = [{
