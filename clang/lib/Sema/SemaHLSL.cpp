@@ -1037,6 +1037,14 @@ void SemaHLSL::handleVkExtLiteralAttr(Decl *D, const ParsedAttr &AL) {
   D->addAttr(HLSLVkExtLiteralAttr::Create(getASTContext(), AL));
 }
 
+void SemaHLSL::handleVkExtReferenceAttr(Decl *D, const ParsedAttr &AL) {
+  // TODO: make sure the function as the ext_instruction attribute.
+  ParmVarDecl *PV = cast<ParmVarDecl>(D);
+  QualType T = PV->getType();
+  QualType RefT = getASTContext().getLValueReferenceType(T);
+  PV->setType(RefT);
+}
+
 // Combines all resource type attributes and creates HLSLAttributedResourceType.
 QualType SemaHLSL::ProcessResourceTypeAttributes(QualType CurrentType) {
   if (!HLSLResourcesTypeAttrs.size())

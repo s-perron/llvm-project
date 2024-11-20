@@ -7796,6 +7796,16 @@ The full documentation is available here: https://github.com/microsoft/DirectXSh
   }];
 }
 
+def VkExtReferenceDocs : Documentation {
+  let Category = DocCatFunction;
+  let Content = [{
+The ``vk::ext_reference`` attribute indicates that the address of the parameter must be pass to the function. This can only
+apply to a parameter of a function that also has the ``vk::ext_instruction`` attribute.
+
+The full documentation is available here: https://github.com/microsoft/DirectXShaderCompiler/wiki/GL_EXT_spirv_intrinsics-for-SPIR-V-code-gen.
+  }];
+}
+
 def NumThreadsDocs : Documentation {
   let Category = DocCatFunction;
   let Content = [{
