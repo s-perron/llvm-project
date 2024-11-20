@@ -968,6 +968,21 @@ static TargetTypeInfo getTargetTypeInfo(const TargetExtType *Ty) {
   if (Name == "spirv.Image")
     return TargetTypeInfo(PointerType::get(C, 0), TargetExtType::CanBeGlobal,
                           TargetExtType::CanBeLocal);
+  if (Name == "spirv.Type") {
+    assert(Ty->getNumIntParameters() == 3 &&
+           "Wrong number of parameters for spirv.Type");
+
+    auto Size = Ty->getIntParameter(1);
+
+    llvm::Type *LayoutType = Type::getVoidTy(C);
+    if (Size > 0)
+      LayoutType = Type::getIntNTy(C, Size);
+
+    return TargetTypeInfo(LayoutType, TargetExtType::CanBeGlobal,
+                          TargetExtType::CanBeLocal);
+  }
+  if (Name == "spirv.IntegralConstant" || Name == "spirv.Literal")
+    return TargetTypeInfo(Type::getVoidTy(C));
   if (Name.starts_with("spirv."))
     return TargetTypeInfo(PointerType::get(C, 0), TargetExtType::HasZeroInit,
                           TargetExtType::CanBeGlobal,

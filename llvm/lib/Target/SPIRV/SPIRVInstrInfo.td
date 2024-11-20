@@ -25,6 +25,12 @@ let isCodeGenOnly=1 in {
   def GET_vpID: Pseudo<(outs vpID:$dst_id), (ins vpID:$src)>;
 }
 
+// TODO: write $opcode as hex
+
+def UNKNOWN_type:
+ UnknownOp<(outs TYPE:$type), (ins i32imm:$opcode, variable_ops),
+                  "$type = $opcode">;
+
 def SPVTypeBin : SDTypeProfile<1, 2, []>;
 
 def assigntype : SDNode<"SPIRVISD::AssignType", SPVTypeBin>;
