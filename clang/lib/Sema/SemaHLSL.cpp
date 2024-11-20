@@ -1022,11 +1022,19 @@ void SemaHLSL::handleVkExtInstructionAttr(Decl *D, const ParsedAttr &AL) {
     return;
 
   StringRef InstructionSet = "";
-  if (AL.getNumArgs() > 1 && !SemaRef.checkStringLiteralArgumentAttr(AL, 1, InstructionSet))
+  if (AL.getNumArgs() > 1 &&
+      !SemaRef.checkStringLiteralArgumentAttr(AL, 1, InstructionSet))
     return;
 
-  auto *NewAttr = HLSLVkExtInstructionAttr::Create(getASTContext(), Opcode, InstructionSet, AL.getLoc());
+  auto *NewAttr = HLSLVkExtInstructionAttr::Create(getASTContext(), Opcode,
+                                                   InstructionSet, AL.getLoc());
   D->addAttr(NewAttr);
+}
+
+void SemaHLSL::handleVkExtLiteralAttr(Decl *D, const ParsedAttr &AL) {
+  // TODO: make sure the function as the ext_instruction attribute.
+
+  D->addAttr(HLSLVkExtLiteralAttr::Create(getASTContext(), AL));
 }
 
 // Combines all resource type attributes and creates HLSLAttributedResourceType.

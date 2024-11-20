@@ -2891,6 +2891,12 @@ void CodeGenModule::ConstructAttributeList(StringRef Name,
     if (FI.getExtParameterInfo(ArgNo).isNoEscape())
       Attrs.addAttribute(llvm::Attribute::NoCapture);
 
+    const ParmVarDecl *PVD =
+        cast<FunctionDecl>(TargetDecl)->getParamDecl(ArgNo);
+    if (PVD->hasAttr<HLSLVkExtLiteralAttr>()) {
+      Attrs.addAttribute("spv.literal");
+    }
+
     if (Attrs.hasAttributes()) {
       unsigned FirstIRArg, NumIRArgs;
       std::tie(FirstIRArg, NumIRArgs) = IRFunctionArgs.getIRArgs(ArgNo);

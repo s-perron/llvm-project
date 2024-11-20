@@ -7786,6 +7786,16 @@ The full documentation is available here: https://microsoft.github.io/hlsl-specs
   }];
 }
 
+def VkExtLiteralDocs : Documentation {
+  let Category = DocCatFunction;
+  let Content = [{
+The ``vk::ext_literal`` attribute indicates that the parameter must be encoded as a literal in the SPIR-V. This can only
+apply to a parameter of a function that also has the ``vk::ext_instruction`` attribute.
+
+The full documentation is available here: https://github.com/microsoft/DirectXShaderCompiler/wiki/GL_EXT_spirv_intrinsics-for-SPIR-V-code-gen.
+  }];
+}
+
 def NumThreadsDocs : Documentation {
   let Category = DocCatFunction;
   let Content = [{
