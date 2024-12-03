@@ -42,13 +42,6 @@ declare spir_func noundef float @_Z7spv_sinf(float noundef) #4
 attributes #0 = { alwaysinline convergent mustprogress norecurse nounwind "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
 attributes #1 = { convergent noinline norecurse "hlsl.numthreads"="1,1,1" "hlsl.shader"="compute" "no-trapping-math"="true" "stack-protector-buffer-size"="8" }
 attributes #2 = { convergent nocallback nofree nosync nounwind willreturn memory(none) }
-attributes #3 = { convergent "no-trapping-math"="true" "spv.ext_instruction"="5056," "stack-protector-buffer-size"="8" }
+attributes #3 = { convergent "no-trapping-math"="true" "spv.ext_capability"="5055" "spv.ext_extension"="SPV_KHR_shader_clock" "spv.ext_instruction"="5056," "stack-protector-buffer-size"="8" }
 attributes #4 = { convergent "no-trapping-math"="true" "spv.ext_instruction"="13,GLSL.std.450" "stack-protector-buffer-size"="8" }
 attributes #5 = { convergent }
-
-!llvm.module.flags = !{!0, !1}
-!llvm.ident = !{!2}
-
-!0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{i32 4, !"dx.disable_optimizations", i32 1}
-!2 = !{!"clang version 20.0.0git (git@github.com:s-perron/llvm-project.git d40e3edd5e88d2f1eaa14e6cb1c604fe827ccb21)"}

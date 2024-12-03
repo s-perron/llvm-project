@@ -603,8 +603,26 @@ bool SPIRVCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
       return *Res;
   }
 
-  if (isFunctionDecl && cast<Function>(Info.Callee.getGlobal())->hasFnAttribute("spv.ext_instruction")) {
-    Attribute Attr = cast<Function>(Info.Callee.getGlobal())->getFnAttribute("spv.ext_instruction");
+  const Function* CalleeFunction = cast<Function>(Info.Callee.getGlobal());
+
+  // Add capabilities and extensions
+  if (CalleeFunction->hasFnAttribute("spv.ext_capability")) {
+    Attribute CapAttr = cast<Function>(Info.Callee.getGlobal())->getFnAttribute("spv.ext_capability");
+    StringRef CapString = CapAttr.getValueAsString();
+    while (!CapString.empty()) {
+      uint32_t Capability = 0;
+      CapString.consumeInteger(10, Capability);
+      CapString.consume_front(",");
+      bool Succeeded = MIRBuilder.buildInstr(SPIRV::OpCapability).addImm(Capability).
+          constrainAllUses(MIRBuilder.getTII(), *ST->getRegisterInfo(), *ST->getRegBankInfo());
+
+      if (!Succeeded)
+        return false;
+    }
+  }
+
+  if (isFunctionDecl && CalleeFunction->hasFnAttribute("spv.ext_instruction")) {
+    Attribute Attr = CalleeFunction->getFnAttribute("spv.ext_instruction");
     StringRef AttrString =Attr.getValueAsString();
     uint32_t Opcode = 0;
     AttrString.consumeInteger(10, Opcode);

@@ -140,6 +140,9 @@ void SPIRVModuleAnalysis::setBaseInfo(const Module &M) {
   MAI.Reqs.clear();
   MAI.Reqs.initAvailableCapabilities(*ST);
 
+  // TODO(STEVEN): Add info in `GR` to contain capabilities and extensions that
+  // are available.
+
   // TODO: determine memory model and source language from the configuratoin.
   if (auto MemModel = M.getNamedMetadata("spirv.MemoryModel")) {
     auto MemMD = MemModel->getOperand(0);
@@ -1621,6 +1624,7 @@ void SPIRVModuleAnalysis::getAnalysisUsage(AnalysisUsage &AU) const {
 }
 
 bool SPIRVModuleAnalysis::runOnModule(Module &M) {
+  dbgs() << "STEVEN: running SPIRVModuleAnalysis\n";
   SPIRVTargetMachine &TM =
       getAnalysis<TargetPassConfig>().getTM<SPIRVTargetMachine>();
   ST = TM.getSubtargetImpl();
