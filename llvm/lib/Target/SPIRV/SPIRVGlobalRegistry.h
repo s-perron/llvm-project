@@ -619,7 +619,7 @@ public:
                                        unsigned Opcode);
 
   SPIRVType *getOrCreateUnknownType(
-      const Type *Ty, MachineIRBuilder &MIRBuilder, unsigned Opcode,
+      const TargetExtType *Ty, MachineIRBuilder &MIRBuilder, unsigned Opcode,
       const std::function<llvm::MachineInstrBuilder(llvm::MachineInstrBuilder)>
           &buildInstr);
 
