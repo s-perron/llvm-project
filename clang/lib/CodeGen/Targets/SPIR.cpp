@@ -380,13 +380,23 @@ llvm::Type *CommonSPIRTargetCodeGenInfo::getHLSLType(CodeGenModule &CGM,
     if (ContainedTy.isNull())
       return nullptr;
 
-    assert(!ResAttrs.RawBuffer &&
-           "Raw buffers handles are not implemented for SPIR-V yet");
     assert(!ResAttrs.IsROV &&
            "Rasterizer order views not implemented for SPIR-V yet");
 
-    // convert element type
     llvm::Type *ElemType = CGM.getTypes().ConvertType(ContainedTy);
+    if (ResAttrs.RawBuffer) {
+      llvm::TargetExtType *StorageBufferLiteral =
+          llvm::TargetExtType::get(Ctx, "spirv.Literal", {}, {12});
+      // TODO: Need to check the layout for `ElemType`.
+      // TODO: Need to add the `block` decoration.
+      llvm::ArrayType *RuntimeArrayType = llvm::ArrayType::get(ElemType, 0);
+      llvm::StructType *StorageBuffer =
+          llvm::StructType::get(Ctx, {RuntimeArrayType}, false);
+      return llvm::TargetExtType::get(
+          Ctx, "spirv.Type", {StorageBufferLiteral, StorageBuffer}, {32, 4, 4});
+    }
+
+    // convert element type
     return getSPIRVImageTypeFromHLSLResource(ResAttrs, ElemType, Ctx);
   }
   case llvm::dxil::ResourceClass::CBuffer:
