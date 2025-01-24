@@ -746,13 +746,26 @@ Type *SPIRVEmitIntrinsics::deduceElementTypeHelper(
 
     auto *II = dyn_cast<IntrinsicInst>(I);
     if (II && II->getIntrinsicID() == Intrinsic::spv_resource_getpointer) {
-      auto *ImageType = cast<TargetExtType>(II->getOperand(0)->getType());
-      assert(ImageType->getTargetExtName() == "spirv.Image");
-      (void)ImageType;
-      if (II->hasOneUse()) {
-        auto *U = *II->users().begin();
-        Ty = cast<Instruction>(U)->getAccessType();
-        assert(Ty && "Unable to get type for resource pointer.");
+      auto *HandleType = cast<TargetExtType>(II->getOperand(0)->getType());
+      if (HandleType->getTargetExtName() == "spirv.Image") {
+        if (II->hasOneUse()) {
+          auto *U = *II->users().begin();
+          Ty = cast<Instruction>(U)->getAccessType();
+          assert(Ty && "Unable to get type for resource pointer.");
+        }
+      }
+      else if (HandleType->getTargetExtName() == "spirv.Type" &&
+               HandleType->getIntParameter(0) ==
+                   32 /* SPIR-V value for SPIRV::OpTypePointer */) {
+        Ty = HandleType->getTypeParameter(1);
+        // This type should be { T[] }, and the return type will be `T*`.
+        assert(Ty->isStructTy());
+        Ty = Ty->getStructElementType(0);
+        assert(Ty->isArrayTy());
+        Ty = Ty->getArrayElementType();
+      } else {
+        HandleType->dump();
+        llvm_unreachable("Unknown handle type for spv_resource_getpointer.");
       }
     } else if (Function *CalledF = CI->getCalledFunction()) {
       std::string DemangledName =
