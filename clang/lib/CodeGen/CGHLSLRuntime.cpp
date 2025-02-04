@@ -528,11 +528,6 @@ void CGHLSLRuntime::generateGlobalCtorDtorCalls() {
   }
 }
 
-// Returns true if the type is an HLSL resource class
-static bool isResourceRecordType(const clang::Type *Ty) {
-  return HLSLAttributedResourceType::findHandleTypeOnResource(Ty) != nullptr;
-}
-
 static void createResourceInitFn(CodeGenModule &CGM, const VarDecl *VD,
                                  llvm::GlobalVariable *GV, unsigned Slot,
                                  unsigned Space) {
@@ -599,7 +594,7 @@ void CGHLSLRuntime::handleGlobalVarDefinition(const VarDecl *VD,
     // on?
     return;
 
-  if (!isResourceRecordType(VD->getType().getTypePtr()))
+  if (!isResource(VD))
     // FIXME: Only simple declarations of resources are supported for now.
     // Arrays of resources or resources in user defined classes are
     // not implemented yet.
@@ -622,4 +617,9 @@ llvm::Instruction *CGHLSLRuntime::getConvergenceToken(BasicBlock &BB) {
   }
   llvm_unreachable("Convergence token should have been emitted.");
   return nullptr;
+}
+
+bool CGHLSLRuntime::isResource(const VarDecl *D) {
+  const clang::Type *ty = D->getType().getTypePtr();
+  return HLSLAttributedResourceType::findHandleTypeOnResource(ty) != nullptr;
 }

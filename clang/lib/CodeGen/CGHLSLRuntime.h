@@ -135,6 +135,8 @@ public:
     llvm::StructType *LayoutStruct = nullptr;
   };
 
+  bool isResource(const VarDecl *D);
+
 protected:
   CodeGenModule &CGM;
 
