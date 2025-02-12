@@ -754,14 +754,12 @@ Type *SPIRVEmitIntrinsics::deduceElementTypeHelper(
           assert(Ty && "Unable to get type for resource pointer.");
         }
       }
-      else if (HandleType->getTargetExtName() == "spirv.Type" &&
-               HandleType->getIntParameter(0) ==
-                   32 /* SPIR-V value for SPIRV::OpTypePointer */) {
-        Ty = HandleType->getTypeParameter(1);
-        // This type should be { T[] }, and the return type will be `T*`.
-        assert(Ty->isStructTy());
-        Ty = Ty->getStructElementType(0);
-        assert(Ty->isArrayTy());
+      else if (HandleType->getTargetExtName() == "spirv.VulkanBuffer") {
+        // This call is supposed to index into an array
+        Ty = HandleType->getTypeParameter(0);
+        assert(Ty->isArrayTy() &&
+            "spv_resource_getpointer indexes into an array, so the type of "
+            "the buffer should be an array.");
         Ty = Ty->getArrayElementType();
       } else {
         HandleType->dump();

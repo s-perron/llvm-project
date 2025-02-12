@@ -3064,39 +3064,45 @@ SPIRVType *lowerBuiltinType(const Type *OpaqueType,
   const StringRef Name = BuiltinType->getName();
   LLVM_DEBUG(dbgs() << "Lowering builtin type: " << Name << "\n");
 
-  // Lookup the demangled builtin type in the TableGen records.
-  const SPIRV::BuiltinType *TypeRecord = SPIRV::lookupBuiltinType(Name);
-  if (!TypeRecord)
-    report_fatal_error("Missing TableGen record for builtin type: " + Name);
-
-  // "Lower" the BuiltinType into TargetType. The following get<...>Type methods
-  // use the implementation details from TableGen records or TargetExtType
-  // parameters to either create a new OpType<...> machine instruction or get an
-  // existing equivalent SPIRVType from GlobalRegistry.
   SPIRVType *TargetType;
-  switch (TypeRecord->Opcode) {
-  case SPIRV::OpTypeImage:
-    TargetType = getImageType(BuiltinType, AccessQual, MIRBuilder, GR);
-    break;
-  case SPIRV::OpTypePipe:
-    TargetType = getPipeType(BuiltinType, MIRBuilder, GR);
-    break;
-  case SPIRV::OpTypeDeviceEvent:
-    TargetType = GR->getOrCreateOpTypeDeviceEvent(MIRBuilder);
-    break;
-  case SPIRV::OpTypeSampler:
-    TargetType = getSamplerType(MIRBuilder, GR);
-    break;
-  case SPIRV::OpTypeSampledImage:
-    TargetType = getSampledImageType(BuiltinType, MIRBuilder, GR);
-    break;
-  case SPIRV::OpTypeCooperativeMatrixKHR:
-    TargetType = getCoopMatrType(BuiltinType, MIRBuilder, GR);
-    break;
-  default:
-    TargetType =
-        getNonParameterizedType(BuiltinType, TypeRecord, MIRBuilder, GR);
-    break;
+  if (Name == "spirv.VulkanBuffer") {
+    TargetType = getVulkanBufferType(BuiltinType, MIRBuilder, GR);
+  } else {
+    // Lookup the demangled builtin type in the TableGen records.
+    const SPIRV::BuiltinType *TypeRecord = SPIRV::lookupBuiltinType(Name);
+    if (!TypeRecord)
+      report_fatal_error("Missing TableGen record for builtin type: " + Name);
+
+    // "Lower" the BuiltinType into TargetType. The following get<...>Type
+    // methods use the implementation details from TableGen records or
+    // TargetExtType parameters to either create a new OpType<...> machine
+    // instruction or get an existing equivalent SPIRVType from
+    // GlobalRegistry.
+
+    switch (TypeRecord->Opcode) {
+    case SPIRV::OpTypeImage:
+      TargetType = getImageType(BuiltinType, AccessQual, MIRBuilder, GR);
+      break;
+    case SPIRV::OpTypePipe:
+      TargetType = getPipeType(BuiltinType, MIRBuilder, GR);
+      break;
+    case SPIRV::OpTypeDeviceEvent:
+      TargetType = GR->getOrCreateOpTypeDeviceEvent(MIRBuilder);
+      break;
+    case SPIRV::OpTypeSampler:
+      TargetType = getSamplerType(MIRBuilder, GR);
+      break;
+    case SPIRV::OpTypeSampledImage:
+      TargetType = getSampledImageType(BuiltinType, MIRBuilder, GR);
+      break;
+    case SPIRV::OpTypeCooperativeMatrixKHR:
+      TargetType = getCoopMatrType(BuiltinType, MIRBuilder, GR);
+      break;
+    default:
+      TargetType =
+          getNonParameterizedType(BuiltinType, TypeRecord, MIRBuilder, GR);
+      break;
+    }
   }
 
   // Emit OpName instruction if a new OpType<...> instruction was added

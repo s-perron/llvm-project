@@ -1058,32 +1058,19 @@ bool SPIRVInstructionSelector::selectLoad(Register ResVReg,
   if (IntPtrDef &&
       IntPtrDef->getIntrinsicID() == Intrinsic::spv_resource_getpointer) {
     Register HandleReg = IntPtrDef->getOperand(2).getReg();
-    Register NewHandleReg =
-        MRI->createVirtualRegister(MRI->getRegClass(HandleReg));
-    auto *HandleDef = cast<GIntrinsic>(getVRegDef(*MRI, HandleReg));
     SPIRVType *HandleType = GR.getSPIRVTypeForVReg(HandleReg);
-    if (!loadHandleBeforePosition(NewHandleReg, HandleType, *HandleDef, I)) {
-      return false;
-    }
-
-    Register IdxReg = IntPtrDef->getOperand(3).getReg();
-
     if (HandleType->getOpcode() == SPIRV::OpTypeImage) {
+      Register NewHandleReg =
+          MRI->createVirtualRegister(MRI->getRegClass(HandleReg));
+      auto *HandleDef = cast<GIntrinsic>(getVRegDef(*MRI, HandleReg));
+      if (!loadHandleBeforePosition(NewHandleReg, HandleType, *HandleDef, I)) {
+        return false;
+      }
+
+      Register IdxReg = IntPtrDef->getOperand(3).getReg();
       return generateImageRead(ResVReg, ResType, NewHandleReg, IdxReg,
                                I.getDebugLoc(), I);
     }
-    assert(HandleType->getOpcode() == SPIRV::OpTypePointer);
-    SPIRVType *PtrType = GR.getSPIRVTypeForVReg(Ptr);
-    Ptr = MRI->createVirtualRegister(MRI->getRegClass(HandleReg));
-    bool Succeeded = BuildMI(*I.getParent(), I, I.getDebugLoc(),
-                             TII.get(SPIRV::OpAccessChain))
-                         .addDef(Ptr)
-                         .addUse(GR.getSPIRVTypeID(PtrType))
-                         .addUse(NewHandleReg)
-                         .addUse(IdxReg)
-                         .constrainAllUses(TII, TRI, RBI);
-    if (!Succeeded)
-      return false;
   }
 
   auto MIB = BuildMI(*I.getParent(), I, I.getDebugLoc(), TII.get(SPIRV::OpLoad))
@@ -3198,7 +3185,13 @@ bool SPIRVInstructionSelector::selectIntrinsic(Register ResVReg,
 bool SPIRVInstructionSelector::selectHandleFromBinding(Register &ResVReg,
                                                        const SPIRVType *ResType,
                                                        MachineInstr &I) const {
-  return true;
+  // The images need to be loaded in the same basic block as their use. We defer
+  // loading the image to the intrinsic that uses it.
+  if (ResType->getOpcode() == SPIRV::OpTypeImage)
+    return true;
+
+  return loadHandleBeforePosition(ResVReg, GR.getSPIRVTypeForVReg(ResVReg),
+                                  *cast<GIntrinsic>(&I), I);
 }
 
 bool SPIRVInstructionSelector::selectReadImageIntrinsic(
@@ -3266,20 +3259,40 @@ bool SPIRVInstructionSelector::generateImageRead(Register &ResVReg,
 
 bool SPIRVInstructionSelector::selectResourceGetPointer(
     Register &ResVReg, const SPIRVType *ResType, MachineInstr &I) const {
-#ifdef ASSERT
-  // For now, the operand is an image. This will change once we start handling
-  // more resource types.
   Register ResourcePtr = I.getOperand(2).getReg();
-  SPIRVType *RegType = GR.getResultType(ResourcePtr);
-  assert(RegType->getOpcode() == SPIRV::OpTypeImage &&
-         "Can only handle texel buffers for now.");
-#endif
+  SPIRVType *RegType = GR.getSPIRVTypeForVReg(ResourcePtr, I.getMF());
+  if (RegType->getOpcode() == SPIRV::OpTypeImage) {
+    // For texel buffers, the index into the image is part of the OpImageRead or
+    // OpImageWrite instructions. So we will do nothing in this case. This
+    // intrinsic will be combined with the load or store when selecting the load
+    // or store.
+    return true;
+  }
 
-  // For texel buffers, the index into the image is part of the OpImageRead or
-  // OpImageWrite instructions. So we will do nothing in this case. This
-  // intrinsic will be combined with the load or store when selecting the load
-  // or store.
-  return true;
+  assert(RegType->getOpcode() == SPIRV::OpTypePointer);
+
+  assert(ResType->getOpcode() == SPIRV::OpTypePointer);
+  MachineIRBuilder MIRBuilder(I);
+  // Changing the storage class is not great. However, Clang is currently not
+  // setting the correct storage class for resource_getpointer.
+  // Will changing the storage class cause problems? I believe all uses will be
+  // either a load, store, GEP, or an intrinsic. The loads and stores
+  // should be okay. We need to make sure the expansion of all the intrinsics
+  // take this change into account as well. The problem will be GEP, which
+  // generally cause problems.
+  ResType = GR.getOrCreateSPIRVPointerType(GR.getPointeeType(ResType), MIRBuilder, GR.getPointerStorageClass(RegType));
+
+  Register IndexReg = I.getOperand(3).getReg();
+  Register ZeroReg =
+      buildZerosVal(GR.getOrCreateSPIRVIntegerType(32, I, TII), I);
+  return BuildMI(*I.getParent(), I, I.getDebugLoc(),
+                 TII.get(SPIRV::OpAccessChain))
+      .addDef(ResVReg)
+      .addUse(GR.getSPIRVTypeID(ResType))
+      .addUse(ResourcePtr)
+      .addUse(ZeroReg)
+      .addUse(IndexReg)
+      .constrainAllUses(TII, TRI, RBI);
 }
 
 bool SPIRVInstructionSelector::extractSubvector(
