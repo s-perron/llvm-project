@@ -2992,6 +2992,33 @@ static SPIRVType *getSampledImageType(const TargetExtType *OpaqueType,
   return GR->getOrCreateOpTypeSampledImage(OpaqueImageType, MIRBuilder);
 }
 
+static SPIRVType *getVulkanBufferType(const TargetExtType *ExtensionType,
+                                      MachineIRBuilder &MIRBuilder,
+                                      SPIRVGlobalRegistry *GR) {
+  assert(ExtensionType->getNumTypeParameters() == 1 &&
+         "Vulkan buffers have exactly one type for the type of the buffer.");
+  assert(ExtensionType->getNumIntParameters() == 3 &&
+         "Vulkan buffer have 3 integer parameters: storage class, is writable, "
+         "and is rov");
+
+  auto *T = StructType::create(ExtensionType->getTypeParameter(0));
+  auto *BlockType = GR->getOrCreateSPIRVType(T, MIRBuilder);
+  buildOpDecorate(BlockType->defs().begin()->getReg(), MIRBuilder,
+                  SPIRV::Decoration::Block, {});
+  buildOpMemberDecorate(BlockType->defs().begin()->getReg(), MIRBuilder,
+                        SPIRV::Decoration::Offset, 0, {0});
+
+  bool IsWritable = ExtensionType->getIntParameter(1);
+  if (!IsWritable) {
+    buildOpMemberDecorate(BlockType->defs().begin()->getReg(), MIRBuilder,
+                          SPIRV::Decoration::NonWritable, 0, {});
+  }
+
+  auto SC = static_cast<SPIRV::StorageClass::StorageClass>(
+      ExtensionType->getIntParameter(0));
+  return GR->getOrCreateSPIRVPointerType(BlockType, MIRBuilder, SC);
+}
+
 namespace SPIRV {
 TargetExtType *parseBuiltinTypeNameToTargetExtType(std::string TypeName,
                                                    LLVMContext &Context) {

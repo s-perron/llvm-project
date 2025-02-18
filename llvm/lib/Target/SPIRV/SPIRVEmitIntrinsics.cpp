@@ -753,13 +753,12 @@ Type *SPIRVEmitIntrinsics::deduceElementTypeHelper(
           Ty = cast<Instruction>(U)->getAccessType();
           assert(Ty && "Unable to get type for resource pointer.");
         }
-      }
-      else if (HandleType->getTargetExtName() == "spirv.VulkanBuffer") {
+      } else if (HandleType->getTargetExtName() == "spirv.VulkanBuffer") {
         // This call is supposed to index into an array
         Ty = HandleType->getTypeParameter(0);
         assert(Ty->isArrayTy() &&
-            "spv_resource_getpointer indexes into an array, so the type of "
-            "the buffer should be an array.");
+               "spv_resource_getpointer indexes into an array, so the type of "
+               "the buffer should be an array.");
         Ty = Ty->getArrayElementType();
       } else {
         HandleType->dump();

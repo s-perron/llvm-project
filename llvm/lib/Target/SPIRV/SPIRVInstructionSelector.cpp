@@ -3273,14 +3273,6 @@ bool SPIRVInstructionSelector::selectResourceGetPointer(
 
   assert(ResType->getOpcode() == SPIRV::OpTypePointer);
   MachineIRBuilder MIRBuilder(I);
-  // Changing the storage class is not great. However, Clang is currently not
-  // setting the correct storage class for resource_getpointer.
-  // Will changing the storage class cause problems? I believe all uses will be
-  // either a load, store, GEP, or an intrinsic. The loads and stores
-  // should be okay. We need to make sure the expansion of all the intrinsics
-  // take this change into account as well. The problem will be GEP, which
-  // generally cause problems.
-  ResType = GR.getOrCreateSPIRVPointerType(GR.getPointeeType(ResType), MIRBuilder, GR.getPointerStorageClass(RegType));
 
   Register IndexReg = I.getOperand(3).getReg();
   Register ZeroReg =
