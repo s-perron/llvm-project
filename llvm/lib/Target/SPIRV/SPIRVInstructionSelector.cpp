@@ -3841,7 +3841,11 @@ bool SPIRVInstructionSelector::selectGlobalValue(
   const GlobalValue *GV = I.getOperand(1).getGlobal();
   Type *GVType = toTypedPointer(GR.getDeducedGlobalValueType(GV));
   SPIRVType *PointerBaseType;
+  // TODO: if an explicit layout is required should depend on the address space.
+  // We could probably assert that we do not have one in an incorrect address
+  // space.
   if (GVType->isArrayTy()) {
+    // Why do we have a special case for the array type?
     SPIRVType *ArrayElementType =
         GR.getOrCreateSPIRVType(GVType->getArrayElementType(), MIRBuilder,
                                 SPIRV::AccessQualifier::ReadWrite, false);

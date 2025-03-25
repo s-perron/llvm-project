@@ -131,6 +131,8 @@ static SPIRVType *createNewPtrType(SPIRVGlobalRegistry &GR, MachineInstr &I,
       static_cast<SPIRV::StorageClass::StorageClass>(
           OpType->getOperand(1).getImm());
   MachineIRBuilder MIB(I);
+  // TODO: If an explicit layout is required should depend on the storage class.
+  // We can assert that SC is does not require an explicit layout.
   SPIRVType *NewBaseType =
       ReuseType ? ResType
                 : GR.getOrCreateSPIRVType(

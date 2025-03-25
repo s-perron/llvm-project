@@ -215,6 +215,8 @@ static SPIRVType *getArgSPIRVType(const Function &F, unsigned ArgIdx,
   Argument *Arg = F.getArg(ArgIdx);
   Type *ArgType = Arg->getType();
   if (isTypedPointerTy(ArgType)) {
+    // TODO: If the ElementType needs an explicit layout should depend on the
+    // address space.
     SPIRVType *ElementType = GR->getOrCreateSPIRVType(
         cast<TypedPointerType>(ArgType)->getElementType(), MIRBuilder,
         SPIRV::AccessQualifier::ReadWrite, true);
@@ -232,6 +234,8 @@ static SPIRVType *getArgSPIRVType(const Function &F, unsigned ArgIdx,
   // spv_assign_ptr_type intrinsic or otherwise use default pointer element
   // type.
   if (hasPointeeTypeAttr(Arg)) {
+    // TODO: If the ElementType needs an explicit layout should depend on the
+    // address space.
     SPIRVType *ElementType =
         GR->getOrCreateSPIRVType(getPointeeTypeByAttr(Arg), MIRBuilder,
                                  SPIRV::AccessQualifier::ReadWrite, true);
@@ -259,6 +263,8 @@ static SPIRVType *getArgSPIRVType(const Function &F, unsigned ArgIdx,
     MetadataAsValue *VMD = cast<MetadataAsValue>(II->getOperand(1));
     Type *ElementTy =
         toTypedPointer(cast<ConstantAsMetadata>(VMD->getMetadata())->getType());
+    // TODO: If the ElementType needs an explicit layout should depend on the
+    // address space.
     SPIRVType *ElementType = GR->getOrCreateSPIRVType(
         ElementTy, MIRBuilder, SPIRV::AccessQualifier::ReadWrite, true);
     return GR->getOrCreateSPIRVPointerType(
@@ -269,6 +275,9 @@ static SPIRVType *getArgSPIRVType(const Function &F, unsigned ArgIdx,
 
   // Replace PointerType with TypedPointerType to be able to map SPIR-V types to
   // LLVM types in a consistent manner
+  // TODO: Maybe, the ElementType needs an explicit layout should depend on the
+  // address space.
+  //       I'm not sure what this case represents.
   return GR->getOrCreateSPIRVType(toTypedPointer(OriginalArgType), MIRBuilder,
                                   ArgAccessQual, true);
 }

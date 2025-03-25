@@ -92,8 +92,9 @@ SPIRVType *SPIRVGlobalRegistry::assignVectTypeToVReg(
 SPIRVType *SPIRVGlobalRegistry::assignTypeToVReg(
     const Type *Type, Register VReg, MachineIRBuilder &MIRBuilder,
     SPIRV::AccessQualifier::AccessQualifier AccessQual, bool EmitIR) {
+  // TODO: Need to check if an explicit layout may be needed in some cases.
   SPIRVType *SpirvType =
-      getOrCreateSPIRVType(Type, MIRBuilder, AccessQual, EmitIR);
+      getOrCreateSPIRVType(Type, MIRBuilder, AccessQual, false, EmitIR);
   assignSPIRVTypeToVReg(SpirvType, VReg, MIRBuilder.getMF());
   return SpirvType;
 }
@@ -431,8 +432,8 @@ Register SPIRVGlobalRegistry::buildConstantFP(APFloat Val,
   auto &Ctx = MF.getFunction().getContext();
   if (!SpvType) {
     const Type *LLVMFPTy = Type::getFloatTy(Ctx);
-    SpvType = getOrCreateSPIRVType(LLVMFPTy, MIRBuilder,
-                                   SPIRV::AccessQualifier::ReadWrite, true);
+    SpvType = getOrCreateSPIRVType(
+        LLVMFPTy, MIRBuilder, SPIRV::AccessQualifier::ReadWrite, false, true);
   }
   // Find a constant in DT or build a new one.
   const auto ConstFP = ConstantFP::get(Ctx, Val);
@@ -673,8 +674,9 @@ Register SPIRVGlobalRegistry::buildConstantSampler(
     MachineIRBuilder &MIRBuilder, SPIRVType *SpvType) {
   SPIRVType *SampTy;
   if (SpvType)
-    SampTy = getOrCreateSPIRVType(getTypeForSPIRVType(SpvType), MIRBuilder,
-                                  SPIRV::AccessQualifier::ReadWrite, true);
+    SampTy =
+        getOrCreateSPIRVType(getTypeForSPIRVType(SpvType), MIRBuilder,
+                             SPIRV::AccessQualifier::ReadWrite, false, true);
   else if ((SampTy = getOrCreateSPIRVTypeByName("opencl.sampler_t", MIRBuilder,
                                                 false)) == nullptr)
     report_fatal_error("Unable to recognize SPIRV type name: opencl.sampler_t");
@@ -890,30 +892,41 @@ Register SPIRVGlobalRegistry::getOrCreateGlobalVariableWithBinding(
   return VarReg;
 }
 
+// TODO: Double check the calls to getOpTypeArray to make sure that `ElemType`
+// is explicitly laid out when required.
 SPIRVType *SPIRVGlobalRegistry::getOpTypeArray(uint32_t NumElems,
                                                SPIRVType *ElemType,
                                                MachineIRBuilder &MIRBuilder,
+                                               bool ExplicitLayoutRequired,
                                                bool EmitIR) {
   assert((ElemType->getOpcode() != SPIRV::OpTypeVoid) &&
          "Invalid array element type");
   SPIRVType *SpvTypeInt32 = getOrCreateSPIRVIntegerType(32, MIRBuilder);
-
+  SPIRVType *ArrayType = nullptr;
   if (NumElems != 0) {
     Register NumElementsVReg =
         buildConstantInt(NumElems, MIRBuilder, SpvTypeInt32, EmitIR);
-    return createOpType(MIRBuilder, [&](MachineIRBuilder &MIRBuilder) {
+    ArrayType = createOpType(MIRBuilder, [&](MachineIRBuilder &MIRBuilder) {
       return MIRBuilder.buildInstr(SPIRV::OpTypeArray)
           .addDef(createTypeVReg(MIRBuilder))
           .addUse(getSPIRVTypeID(ElemType))
           .addUse(NumElementsVReg);
     });
   } else {
-    return createOpType(MIRBuilder, [&](MachineIRBuilder &MIRBuilder) {
+    ArrayType = createOpType(MIRBuilder, [&](MachineIRBuilder &MIRBuilder) {
       return MIRBuilder.buildInstr(SPIRV::OpTypeRuntimeArray)
           .addDef(createTypeVReg(MIRBuilder))
           .addUse(getSPIRVTypeID(ElemType));
     });
   }
+
+  if (ExplicitLayoutRequired) {
+    Type *ET = const_cast<Type *>(getTypeForSPIRVType(ElemType));
+    addArrayStrideDecorations(ArrayType->defs().begin()->getReg(), ET,
+                              MIRBuilder);
+  }
+
+  return ArrayType;
 }
 
 SPIRVType *SPIRVGlobalRegistry::getOpTypeOpaque(const StructType *Ty,
@@ -931,7 +944,8 @@ SPIRVType *SPIRVGlobalRegistry::getOpTypeOpaque(const StructType *Ty,
 
 SPIRVType *SPIRVGlobalRegistry::getOpTypeStruct(
     const StructType *Ty, MachineIRBuilder &MIRBuilder,
-    SPIRV::AccessQualifier::AccessQualifier AccQual, bool EmitIR) {
+    SPIRV::AccessQualifier::AccessQualifier AccQual,
+    bool ExplicitLayoutRequired, bool EmitIR) {
   SmallVector<Register, 4> FieldTypes;
   constexpr unsigned MaxWordCount = UINT16_MAX;
   const size_t NumElements = Ty->getNumElements();
@@ -945,8 +959,8 @@ SPIRVType *SPIRVGlobalRegistry::getOpTypeStruct(
   }
 
   for (const auto &Elem : Ty->elements()) {
-    SPIRVType *ElemTy =
-        findSPIRVType(toTypedPointer(Elem), MIRBuilder, AccQual, EmitIR);
+    SPIRVType *ElemTy = findSPIRVType(toTypedPointer(Elem), MIRBuilder, AccQual,
+                                      ExplicitLayoutRequired, EmitIR);
     assert(ElemTy && ElemTy->getOpcode() != SPIRV::OpTypeVoid &&
            "Invalid struct element type");
     FieldTypes.push_back(getSPIRVTypeID(ElemTy));
@@ -973,6 +987,11 @@ SPIRVType *SPIRVGlobalRegistry::getOpTypeStruct(
       return MIB;
     });
   }
+
+  if (ExplicitLayoutRequired)
+    addStructOffsetDecorations(SPVType->defs().begin()->getReg(),
+                               const_cast<StructType *>(Ty), MIRBuilder);
+
   return SPVType;
 }
 
@@ -1021,24 +1040,26 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateOpTypeFunctionWithArgs(
     const Type *Ty, SPIRVType *RetType,
     const SmallVectorImpl<SPIRVType *> &ArgTypes,
     MachineIRBuilder &MIRBuilder) {
-  Register Reg = DT.find(Ty, &MIRBuilder.getMF());
+  Register Reg = DT.find(Ty, false, &MIRBuilder.getMF());
   if (Reg.isValid())
     return getSPIRVTypeForVReg(Reg);
   SPIRVType *SpirvType = getOpTypeFunction(RetType, ArgTypes, MIRBuilder);
-  DT.add(Ty, CurMF, getSPIRVTypeID(SpirvType));
+  DT.add(Ty, false, CurMF, getSPIRVTypeID(SpirvType));
   return finishCreatingSPIRVType(Ty, SpirvType);
 }
 
 SPIRVType *SPIRVGlobalRegistry::findSPIRVType(
     const Type *Ty, MachineIRBuilder &MIRBuilder,
-    SPIRV::AccessQualifier::AccessQualifier AccQual, bool EmitIR) {
+    SPIRV::AccessQualifier::AccessQualifier AccQual,
+    bool ExplicitLayoutRequired, bool EmitIR) {
   Ty = adjustIntTypeByWidth(Ty);
-  Register Reg = DT.find(Ty, &MIRBuilder.getMF());
+  Register Reg = DT.find(Ty, ExplicitLayoutRequired, &MIRBuilder.getMF());
   if (Reg.isValid())
     return getSPIRVTypeForVReg(Reg);
   if (auto It = ForwardPointerTypes.find(Ty); It != ForwardPointerTypes.end())
     return It->second;
-  return restOfCreateSPIRVType(Ty, MIRBuilder, AccQual, EmitIR);
+  return restOfCreateSPIRVType(Ty, MIRBuilder, AccQual, ExplicitLayoutRequired,
+                               EmitIR);
 }
 
 Register SPIRVGlobalRegistry::getSPIRVTypeID(const SPIRVType *SpirvType) const {
@@ -1072,7 +1093,8 @@ const Type *SPIRVGlobalRegistry::adjustIntTypeByWidth(const Type *Ty) const {
 
 SPIRVType *SPIRVGlobalRegistry::createSPIRVType(
     const Type *Ty, MachineIRBuilder &MIRBuilder,
-    SPIRV::AccessQualifier::AccessQualifier AccQual, bool EmitIR) {
+    SPIRV::AccessQualifier::AccessQualifier AccQual,
+    bool ExplicitLayoutRequired, bool EmitIR) {
   if (isSpecialOpaqueType(Ty))
     return getOrCreateSpecialType(Ty, MIRBuilder, AccQual);
   auto &TypeToSPIRVTypeMap = DT.getTypes()->getAllUses();
@@ -1093,34 +1115,40 @@ SPIRVType *SPIRVGlobalRegistry::createSPIRVType(
   if (Ty->isVoidTy())
     return getOpTypeVoid(MIRBuilder);
   if (Ty->isVectorTy()) {
-    SPIRVType *El = findSPIRVType(cast<FixedVectorType>(Ty)->getElementType(),
-                                  MIRBuilder, AccQual, EmitIR);
+    SPIRVType *El =
+        findSPIRVType(cast<FixedVectorType>(Ty)->getElementType(), MIRBuilder,
+                      AccQual, ExplicitLayoutRequired, EmitIR);
     return getOpTypeVector(cast<FixedVectorType>(Ty)->getNumElements(), El,
                            MIRBuilder);
   }
   if (Ty->isArrayTy()) {
-    SPIRVType *El =
-        findSPIRVType(Ty->getArrayElementType(), MIRBuilder, AccQual, EmitIR);
-    return getOpTypeArray(Ty->getArrayNumElements(), El, MIRBuilder, EmitIR);
+    SPIRVType *El = findSPIRVType(Ty->getArrayElementType(), MIRBuilder,
+                                  AccQual, ExplicitLayoutRequired, EmitIR);
+    return getOpTypeArray(Ty->getArrayNumElements(), El, MIRBuilder,
+                          ExplicitLayoutRequired, EmitIR);
   }
   if (auto SType = dyn_cast<StructType>(Ty)) {
     if (SType->isOpaque())
       return getOpTypeOpaque(SType, MIRBuilder);
-    return getOpTypeStruct(SType, MIRBuilder, AccQual, EmitIR);
+    return getOpTypeStruct(SType, MIRBuilder, AccQual, ExplicitLayoutRequired,
+                           EmitIR);
   }
   if (auto FType = dyn_cast<FunctionType>(Ty)) {
-    SPIRVType *RetTy =
-        findSPIRVType(FType->getReturnType(), MIRBuilder, AccQual, EmitIR);
+    SPIRVType *RetTy = findSPIRVType(FType->getReturnType(), MIRBuilder,
+                                     AccQual, ExplicitLayoutRequired, EmitIR);
     SmallVector<SPIRVType *, 4> ParamTypes;
     for (const auto &ParamTy : FType->params())
-      ParamTypes.push_back(findSPIRVType(ParamTy, MIRBuilder, AccQual, EmitIR));
+      ParamTypes.push_back(findSPIRVType(ParamTy, MIRBuilder, AccQual,
+                                         ExplicitLayoutRequired, EmitIR));
     return getOpTypeFunction(RetTy, ParamTypes, MIRBuilder);
   }
 
   unsigned AddrSpace = typeToAddressSpace(Ty);
   SPIRVType *SpvElementType = nullptr;
+  // TODO: If an explict layout is required depends on the address space.
   if (Type *ElemTy = ::getPointeeType(Ty))
-    SpvElementType = getOrCreateSPIRVType(ElemTy, MIRBuilder, AccQual, EmitIR);
+    SpvElementType = getOrCreateSPIRVType(ElemTy, MIRBuilder, AccQual,
+                                          ExplicitLayoutRequired, EmitIR);
   else
     SpvElementType = getOrCreateSPIRVIntegerType(8, MIRBuilder);
 
@@ -1148,15 +1176,23 @@ SPIRVType *SPIRVGlobalRegistry::createSPIRVType(
 
 SPIRVType *SPIRVGlobalRegistry::restOfCreateSPIRVType(
     const Type *Ty, MachineIRBuilder &MIRBuilder,
-    SPIRV::AccessQualifier::AccessQualifier AccessQual, bool EmitIR) {
+    SPIRV::AccessQualifier::AccessQualifier AccessQual,
+    bool ExplicitLayoutRequired, bool EmitIR) {
+  // TODO: Could this create a problem if one requires an explicit layout, and
+  // the next time it does not?
   if (TypesInProcessing.count(Ty) && !isPointerTyOrWrapper(Ty))
     return nullptr;
   TypesInProcessing.insert(Ty);
-  SPIRVType *SpirvType = createSPIRVType(Ty, MIRBuilder, AccessQual, EmitIR);
+  SPIRVType *SpirvType = createSPIRVType(Ty, MIRBuilder, AccessQual,
+                                         ExplicitLayoutRequired, EmitIR);
   TypesInProcessing.erase(Ty);
   VRegToTypeMap[&MIRBuilder.getMF()][getSPIRVTypeID(SpirvType)] = SpirvType;
+
+  // TODO: We could end up with two SPIR-V types pointing to the same llvm type.
+  // Is that a problem?
   SPIRVToLLVMType[SpirvType] = unifyPtrType(Ty);
-  Register Reg = DT.find(Ty, &MIRBuilder.getMF());
+
+  Register Reg = DT.find(Ty, ExplicitLayoutRequired, &MIRBuilder.getMF());
   // Do not add OpTypeForwardPointer to DT, a corresponding normal pointer type
   // will be added later. For special types it is already added to DT.
   if (SpirvType->getOpcode() != SPIRV::OpTypeForwardPointer && !Reg.isValid() &&
@@ -1166,7 +1202,8 @@ SPIRVType *SPIRVGlobalRegistry::restOfCreateSPIRVType(
       DT.add(ExtTy->getTypeParameter(0), ExtTy->getIntParameter(0),
              &MIRBuilder.getMF(), getSPIRVTypeID(SpirvType));
     else if (!isPointerTy(Ty))
-      DT.add(Ty, &MIRBuilder.getMF(), getSPIRVTypeID(SpirvType));
+      DT.add(Ty, ExplicitLayoutRequired, &MIRBuilder.getMF(),
+             getSPIRVTypeID(SpirvType));
     else if (isTypedPointerTy(Ty))
       DT.add(cast<TypedPointerType>(Ty)->getElementType(),
              getPointerAddressSpace(Ty), &MIRBuilder.getMF(),
@@ -1202,7 +1239,8 @@ SPIRVType *SPIRVGlobalRegistry::getResultType(Register VReg,
 
 SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVType(
     const Type *Ty, MachineIRBuilder &MIRBuilder,
-    SPIRV::AccessQualifier::AccessQualifier AccessQual, bool EmitIR) {
+    SPIRV::AccessQualifier::AccessQualifier AccessQual,
+    bool ExplicitLayoutRequired, bool EmitIR) {
   Register Reg;
   if (auto *ExtTy = dyn_cast<TargetExtType>(Ty);
       ExtTy && isTypedPointerWrapper(ExtTy)) {
@@ -1210,8 +1248,11 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVType(
                   &MIRBuilder.getMF());
   } else if (!isPointerTy(Ty)) {
     Ty = adjustIntTypeByWidth(Ty);
-    Reg = DT.find(Ty, &MIRBuilder.getMF());
+    Reg = DT.find(Ty, ExplicitLayoutRequired, &MIRBuilder.getMF());
   } else if (isTypedPointerTy(Ty)) {
+    // TODO: Do we need to check if a layout is required? I don't think so
+    // because if the pointee type is laid out should
+    //  be completely determined by the address space.
     Reg = DT.find(cast<TypedPointerType>(Ty)->getElementType(),
                   getPointerAddressSpace(Ty), &MIRBuilder.getMF());
   } else {
@@ -1223,15 +1264,20 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVType(
   if (Reg.isValid() && !isSpecialOpaqueType(Ty))
     return getSPIRVTypeForVReg(Reg);
   TypesInProcessing.clear();
-  SPIRVType *STy = restOfCreateSPIRVType(Ty, MIRBuilder, AccessQual, EmitIR);
+  SPIRVType *STy = restOfCreateSPIRVType(Ty, MIRBuilder, AccessQual,
+                                         ExplicitLayoutRequired, EmitIR);
   // Create normal pointer types for the corresponding OpTypeForwardPointers.
   for (auto &CU : ForwardPointerTypes) {
     const Type *Ty2 = CU.first;
     SPIRVType *STy2 = CU.second;
-    if ((Reg = DT.find(Ty2, &MIRBuilder.getMF())).isValid())
+    // TODO: Are we using the right `find` function if we are looking for a
+    // pointer type? Do all types end up in `TT`?
+    if ((Reg = DT.find(Ty2, ExplicitLayoutRequired, &MIRBuilder.getMF()))
+            .isValid())
       STy2 = getSPIRVTypeForVReg(Reg);
     else
-      STy2 = restOfCreateSPIRVType(Ty2, MIRBuilder, AccessQual, EmitIR);
+      STy2 = restOfCreateSPIRVType(Ty2, MIRBuilder, AccessQual,
+                                   ExplicitLayoutRequired, EmitIR);
     if (Ty == Ty2)
       STy = STy2;
   }
@@ -1388,13 +1434,11 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateVulkanBufferType(
   // TODO: Check that I will not collide with a similar struct that does not
   // have the decorations.
   auto *T = StructType::create(ElemType);
-  auto *BlockType =
-      getOrCreateSPIRVType(T, MIRBuilder, SPIRV::AccessQualifier::None, EmitIr);
+  auto *BlockType = getOrCreateSPIRVType(
+      T, MIRBuilder, SPIRV::AccessQualifier::None, true, EmitIr);
 
   buildOpDecorate(BlockType->defs().begin()->getReg(), MIRBuilder,
                   SPIRV::Decoration::Block, {});
-  buildOpMemberDecorate(BlockType->defs().begin()->getReg(), MIRBuilder,
-                        SPIRV::Decoration::Offset, 0, {0});
 
   if (!IsWritable) {
     buildOpMemberDecorate(BlockType->defs().begin()->getReg(), MIRBuilder,
@@ -1485,7 +1529,7 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateOpTypeCoopMatr(
     MachineIRBuilder &MIRBuilder, const TargetExtType *ExtensionType,
     const SPIRVType *ElemType, uint32_t Scope, uint32_t Rows, uint32_t Columns,
     uint32_t Use, bool EmitIR) {
-  Register ResVReg = DT.find(ExtensionType, &MIRBuilder.getMF());
+  Register ResVReg = DT.find(ExtensionType, false, &MIRBuilder.getMF());
   if (ResVReg.isValid())
     return MIRBuilder.getMF().getRegInfo().getUniqueVRegDef(ResVReg);
   ResVReg = createTypeVReg(MIRBuilder);
@@ -1498,18 +1542,18 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateOpTypeCoopMatr(
           .addUse(buildConstantInt(Rows, MIRBuilder, SpvTypeInt32, EmitIR))
           .addUse(buildConstantInt(Columns, MIRBuilder, SpvTypeInt32, EmitIR))
           .addUse(buildConstantInt(Use, MIRBuilder, SpvTypeInt32, EmitIR));
-  DT.add(ExtensionType, &MIRBuilder.getMF(), ResVReg);
+  DT.add(ExtensionType, false, &MIRBuilder.getMF(), ResVReg);
   return SpirvTy;
 }
 
 SPIRVType *SPIRVGlobalRegistry::getOrCreateOpTypeByOpcode(
     const Type *Ty, MachineIRBuilder &MIRBuilder, unsigned Opcode) {
-  Register ResVReg = DT.find(Ty, &MIRBuilder.getMF());
+  Register ResVReg = DT.find(Ty, false, &MIRBuilder.getMF());
   if (ResVReg.isValid())
     return MIRBuilder.getMF().getRegInfo().getUniqueVRegDef(ResVReg);
   ResVReg = createTypeVReg(MIRBuilder);
   SPIRVType *SpirvTy = MIRBuilder.buildInstr(Opcode).addDef(ResVReg);
-  DT.add(Ty, &MIRBuilder.getMF(), ResVReg);
+  DT.add(Ty, false, &MIRBuilder.getMF(), ResVReg);
   return SpirvTy;
 }
 
@@ -1534,7 +1578,7 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVTypeByName(
   if (hasBuiltinTypePrefix(TypeStr))
     return getOrCreateSPIRVType(SPIRV::parseBuiltinTypeNameToTargetExtType(
                                     TypeStr.str(), MIRBuilder.getContext()),
-                                MIRBuilder, AQ, true);
+                                MIRBuilder, AQ, false, true);
 
   // Parse type name in either "typeN" or "type vector[N]" format, where
   // N is the number of elements of the vector.
@@ -1545,7 +1589,7 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVTypeByName(
     // Unable to recognize SPIRV type name
     return nullptr;
 
-  auto SpirvTy = getOrCreateSPIRVType(Ty, MIRBuilder, AQ, true);
+  auto SpirvTy = getOrCreateSPIRVType(Ty, MIRBuilder, AQ, false, true);
 
   // Handle "type*" or  "type* vector[N]".
   if (TypeStr.starts_with("*")) {
@@ -1574,7 +1618,7 @@ SPIRVGlobalRegistry::getOrCreateSPIRVIntegerType(unsigned BitWidth,
                                                  MachineIRBuilder &MIRBuilder) {
   return getOrCreateSPIRVType(
       IntegerType::get(MIRBuilder.getMF().getFunction().getContext(), BitWidth),
-      MIRBuilder, SPIRV::AccessQualifier::ReadWrite, true);
+      MIRBuilder, SPIRV::AccessQualifier::ReadWrite, false, true);
 }
 
 SPIRVType *SPIRVGlobalRegistry::finishCreatingSPIRVType(const Type *LLVMTy,
@@ -1590,7 +1634,7 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVType(unsigned BitWidth,
                                                      const SPIRVInstrInfo &TII,
                                                      unsigned SPIRVOPcode,
                                                      Type *LLVMTy) {
-  Register Reg = DT.find(LLVMTy, CurMF);
+  Register Reg = DT.find(LLVMTy, false, CurMF);
   if (Reg.isValid())
     return getSPIRVTypeForVReg(Reg);
   MachineBasicBlock &BB = *I.getParent();
@@ -1598,7 +1642,7 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVType(unsigned BitWidth,
                  .addDef(createTypeVReg(CurMF->getRegInfo()))
                  .addImm(BitWidth)
                  .addImm(0);
-  DT.add(LLVMTy, CurMF, getSPIRVTypeID(MIB));
+  DT.add(LLVMTy, false, CurMF, getSPIRVTypeID(MIB));
   return finishCreatingSPIRVType(LLVMTy, MIB);
 }
 
@@ -1638,20 +1682,20 @@ SPIRVGlobalRegistry::getOrCreateSPIRVBoolType(MachineIRBuilder &MIRBuilder,
                                               bool EmitIR) {
   return getOrCreateSPIRVType(
       IntegerType::get(MIRBuilder.getMF().getFunction().getContext(), 1),
-      MIRBuilder, SPIRV::AccessQualifier::ReadWrite, EmitIR);
+      MIRBuilder, SPIRV::AccessQualifier::ReadWrite, false, EmitIR);
 }
 
 SPIRVType *
 SPIRVGlobalRegistry::getOrCreateSPIRVBoolType(MachineInstr &I,
                                               const SPIRVInstrInfo &TII) {
   Type *LLVMTy = IntegerType::get(CurMF->getFunction().getContext(), 1);
-  Register Reg = DT.find(LLVMTy, CurMF);
+  Register Reg = DT.find(LLVMTy, false, CurMF);
   if (Reg.isValid())
     return getSPIRVTypeForVReg(Reg);
   MachineBasicBlock &BB = *I.getParent();
   auto MIB = BuildMI(BB, I, I.getDebugLoc(), TII.get(SPIRV::OpTypeBool))
                  .addDef(createTypeVReg(CurMF->getRegInfo()));
-  DT.add(LLVMTy, CurMF, getSPIRVTypeID(MIB));
+  DT.add(LLVMTy, false, CurMF, getSPIRVTypeID(MIB));
   return finishCreatingSPIRVType(LLVMTy, MIB);
 }
 
@@ -1661,7 +1705,7 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVVectorType(
   return getOrCreateSPIRVType(
       FixedVectorType::get(const_cast<Type *>(getTypeForSPIRVType(BaseType)),
                            NumElements),
-      MIRBuilder, SPIRV::AccessQualifier::ReadWrite, EmitIR);
+      MIRBuilder, SPIRV::AccessQualifier::ReadWrite, false, EmitIR);
 }
 
 SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVVectorType(
@@ -1669,7 +1713,7 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVVectorType(
     const SPIRVInstrInfo &TII) {
   Type *LLVMTy = FixedVectorType::get(
       const_cast<Type *>(getTypeForSPIRVType(BaseType)), NumElements);
-  Register Reg = DT.find(LLVMTy, CurMF);
+  Register Reg = DT.find(LLVMTy, false, CurMF);
   if (Reg.isValid())
     return getSPIRVTypeForVReg(Reg);
   MachineBasicBlock &BB = *I.getParent();
@@ -1677,16 +1721,17 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVVectorType(
                  .addDef(createTypeVReg(CurMF->getRegInfo()))
                  .addUse(getSPIRVTypeID(BaseType))
                  .addImm(NumElements);
-  DT.add(LLVMTy, CurMF, getSPIRVTypeID(MIB));
+  DT.add(LLVMTy, false, CurMF, getSPIRVTypeID(MIB));
   return finishCreatingSPIRVType(LLVMTy, MIB);
 }
 
 SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVArrayType(
     SPIRVType *BaseType, unsigned NumElements, MachineInstr &I,
     const SPIRVInstrInfo &TII) {
+  // TODO: The array may need to be explicitly laid out.
   Type *LLVMTy = ArrayType::get(
       const_cast<Type *>(getTypeForSPIRVType(BaseType)), NumElements);
-  Register Reg = DT.find(LLVMTy, CurMF);
+  Register Reg = DT.find(LLVMTy, false, CurMF);
   if (Reg.isValid())
     return getSPIRVTypeForVReg(Reg);
   MachineBasicBlock &BB = *I.getParent();
@@ -1696,7 +1741,7 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVArrayType(
                  .addDef(createTypeVReg(CurMF->getRegInfo()))
                  .addUse(getSPIRVTypeID(BaseType))
                  .addUse(Len);
-  DT.add(LLVMTy, CurMF, getSPIRVTypeID(MIB));
+  DT.add(LLVMTy, false, CurMF, getSPIRVTypeID(MIB));
   return finishCreatingSPIRVType(LLVMTy, MIB);
 }
 
@@ -1943,4 +1988,21 @@ void SPIRVGlobalRegistry::updateAssignType(CallInst *AssignCI, Value *Arg,
   Type *ElemTy = OfType->getType();
   addDeducedElementType(AssignCI, ElemTy);
   addDeducedElementType(Arg, ElemTy);
+}
+
+void SPIRVGlobalRegistry::addStructOffsetDecorations(
+    Register Reg, StructType *Ty, MachineIRBuilder &MIRBuilder) {
+  ArrayRef<TypeSize> Offsets =
+      DataLayout().getStructLayout(Ty)->getMemberOffsets();
+  for (uint32_t I = 0; I < Ty->getNumElements(); ++I) {
+    buildOpMemberDecorate(Reg, MIRBuilder, SPIRV::Decoration::Offset, I,
+                          {static_cast<uint32_t>(Offsets[I])});
+  }
+}
+
+void SPIRVGlobalRegistry::addArrayStrideDecorations(
+    Register Reg, Type *ElementType, MachineIRBuilder &MIRBuilder) {
+  uint32_t SizeInBytes = DataLayout().getTypeSizeInBits(ElementType) / 8;
+  buildOpDecorate(Reg, MIRBuilder, SPIRV::Decoration::ArrayStride,
+                  {SizeInBytes});
 }

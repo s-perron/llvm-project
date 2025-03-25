@@ -229,6 +229,7 @@ class SPIRVDuplicatesTracker<SPIRV::SpecialTypeDescriptor>
 
 class SPIRVGeneralDuplicatesTracker {
   SPIRVDuplicatesTracker<Type> TT;
+  SPIRVDuplicatesTracker<Type> LTT;
   SPIRVDuplicatesTracker<Constant> CT;
   SPIRVDuplicatesTracker<GlobalVariable> GT;
   SPIRVDuplicatesTracker<Function> FT;
@@ -237,8 +238,10 @@ class SPIRVGeneralDuplicatesTracker {
   SPIRVDuplicatesTracker<SPIRV::SpecialTypeDescriptor> ST;
 
 public:
-  void add(const Type *Ty, const MachineFunction *MF, Register R) {
-    TT.add(unifyPtrType(Ty), MF, R);
+  void add(const Type *Ty, bool ExplicitLayoutRequired,
+           const MachineFunction *MF, Register R) {
+    SPIRVDuplicatesTracker<Type> &Tracker = ExplicitLayoutRequired ? LTT : TT;
+    Tracker.add(unifyPtrType(Ty), MF, R);
   }
 
   void add(const Type *PointeeTy, unsigned AddressSpace,
@@ -272,8 +275,10 @@ public:
     ST.add(TD, MF, R);
   }
 
-  Register find(const Type *Ty, const MachineFunction *MF) {
-    return TT.find(unifyPtrType(Ty), MF);
+  Register find(const Type *Ty, bool ExplicitLayoutRequired,
+                const MachineFunction *MF) {
+    SPIRVDuplicatesTracker<Type> &Tracker = ExplicitLayoutRequired ? LTT : TT;
+    return Tracker.find(unifyPtrType(Ty), MF);
   }
 
   Register find(const Type *PointeeTy, unsigned AddressSpace,

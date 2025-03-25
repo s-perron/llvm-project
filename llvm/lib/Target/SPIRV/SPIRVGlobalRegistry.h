@@ -98,14 +98,14 @@ class SPIRVGlobalRegistry {
   // Add a new OpTypeXXX instruction without checking for duplicates.
   SPIRVType *createSPIRVType(const Type *Type, MachineIRBuilder &MIRBuilder,
                              SPIRV::AccessQualifier::AccessQualifier AQ,
-                             bool EmitIR);
+                             bool ExplicitLayoutRequired, bool EmitIR);
   SPIRVType *findSPIRVType(const Type *Ty, MachineIRBuilder &MIRBuilder,
                            SPIRV::AccessQualifier::AccessQualifier accessQual,
-                           bool EmitIR);
+                           bool ExplicitLayoutRequired, bool EmitIR);
   SPIRVType *
   restOfCreateSPIRVType(const Type *Type, MachineIRBuilder &MIRBuilder,
                         SPIRV::AccessQualifier::AccessQualifier AccessQual,
-                        bool EmitIR);
+                        bool ExplicitLayoutRequired, bool EmitIR);
 
   // Internal function creating the an OpType at the correct position in the
   // function by tweaking the passed "MIRBuilder" insertion point and restoring
@@ -345,7 +345,9 @@ public:
   SPIRVType *getOrCreateSPIRVType(const Type *Type,
                                   MachineIRBuilder &MIRBuilder,
                                   SPIRV::AccessQualifier::AccessQualifier AQ,
-                                  bool EmitIR);
+                                  bool EmitIR) {
+    return getOrCreateSPIRVType(Type, MIRBuilder, AQ, false, EmitIR);
+  }
 
   const Type *getTypeForSPIRVType(const SPIRVType *Ty) const {
     auto Res = SPIRVToLLVMType.find(Ty);
@@ -458,6 +460,11 @@ private:
   const Type *adjustIntTypeByWidth(const Type *Ty) const;
   unsigned adjustOpTypeIntWidth(unsigned Width) const;
 
+  SPIRVType *getOrCreateSPIRVType(const Type *Type,
+                                  MachineIRBuilder &MIRBuilder,
+                                  SPIRV::AccessQualifier::AccessQualifier AQ,
+                                  bool ExplicitLayoutRequired, bool EmitIR);
+
   SPIRVType *getOpTypeInt(unsigned Width, MachineIRBuilder &MIRBuilder,
                           bool IsSigned = false);
 
@@ -469,14 +476,15 @@ private:
                              MachineIRBuilder &MIRBuilder);
 
   SPIRVType *getOpTypeArray(uint32_t NumElems, SPIRVType *ElemType,
-                            MachineIRBuilder &MIRBuilder, bool EmitIR);
+                            MachineIRBuilder &MIRBuilder,
+                            bool ExplicitLayoutRequired, bool EmitIR);
 
   SPIRVType *getOpTypeOpaque(const StructType *Ty,
                              MachineIRBuilder &MIRBuilder);
 
   SPIRVType *getOpTypeStruct(const StructType *Ty, MachineIRBuilder &MIRBuilder,
                              SPIRV::AccessQualifier::AccessQualifier AccQual,
-                             bool EmitIR);
+                             bool ExplicitLayoutRequired, bool EmitIR);
 
   SPIRVType *getOpTypePointer(SPIRV::StorageClass::StorageClass SC,
                               SPIRVType *ElemType, MachineIRBuilder &MIRBuilder,
@@ -515,6 +523,11 @@ private:
                                          SPIRVType *SpvType, bool EmitIR,
                                          Constant *CA, unsigned BitWidth,
                                          unsigned ElemCnt);
+
+  void addStructOffsetDecorations(Register Reg, StructType *Ty,
+                                  MachineIRBuilder &MIRBuilder);
+  void addArrayStrideDecorations(Register Reg, Type *ElementType,
+                                 MachineIRBuilder &MIRBuilder);
 
 public:
   Register buildConstantInt(uint64_t Val, MachineIRBuilder &MIRBuilder,
