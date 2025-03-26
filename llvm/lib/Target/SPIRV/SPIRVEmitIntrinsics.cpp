@@ -1556,8 +1556,10 @@ void SPIRVEmitIntrinsics::insertPtrCastOrAssignTypeInstr(Instruction *I,
     Type *OpTy = Op->getType();
     if (auto *OpI = dyn_cast<Instruction>(Op))
       OpTy = restoreMutatedType(GR, OpI, OpTy);
-    if (OpTy == Op->getType())
-      OpTy = deduceElementTypeByValueDeep(OpTy, Op, false);
+    // if (OpTy == Op->getType())
+    // I believe this function is simply wrong, but I don't understand what it
+    // is supposed to do.
+    //  OpTy = deduceElementTypeByValueDeep(OpTy, Op, false);
     replacePointerOperandWithPtrCast(I, Pointer, OpTy, 1, B);
     return;
   }
