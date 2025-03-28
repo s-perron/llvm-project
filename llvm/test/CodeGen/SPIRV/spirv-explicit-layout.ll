@@ -7,21 +7,21 @@ target datalayout = "e-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:
 @private = internal addrspace(10) global %struct.S poison
 @storage_buffer = internal addrspace(11) global %struct.S poison
 
-; CHECK: STEVEN
+; CHECK: Shader
 
-define %struct.S @private_load() #1 {
+define external %struct.S @private_load() {
 entry:
   %1 = load %struct.S, ptr addrspace(10) @private, align 4
   ret %struct.S %1
 }
 
-define %struct.S @storage_buffer_load() #1 {
+define external %struct.S @storage_buffer_load() {
 entry:
   %1 = load %struct.S, ptr addrspace(11) @storage_buffer, align 4
   ret %struct.S %1
 }
 
-define %struct.S @vulkan_buffer_load() #1 {
+define external %struct.S @vulkan_buffer_load() {
 entry:
   %handle = tail call target("spirv.VulkanBuffer", [0 x %struct.S], 12, 0) @llvm.spv.resource.handlefrombinding(i32 0, i32 0, i32 1, i32 0, i1 false)
   %0 = tail call noundef nonnull align 4 dereferenceable(4) ptr addrspace(11) @llvm.spv.resource.getpointer(target("spirv.VulkanBuffer", [0 x %struct.S], 12, 0) %handle, i32 1)

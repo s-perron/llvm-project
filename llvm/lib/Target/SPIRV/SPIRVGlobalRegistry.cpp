@@ -57,6 +57,38 @@ inline unsigned typeToAddressSpace(const Type *Ty) {
   report_fatal_error("Unable to convert LLVM type to SPIRVType", true);
 }
 
+bool storageClassRequiresExplictLayout(SPIRV::StorageClass::StorageClass SC) {
+  switch (SC) {
+  case SPIRV::StorageClass::Uniform:
+  case SPIRV::StorageClass::PushConstant:
+  case SPIRV::StorageClass::StorageBuffer:
+    // case SPIRV::StorageClass::PhysicalStorageBuffer:
+    return true;
+  case SPIRV::StorageClass::UniformConstant:
+  case SPIRV::StorageClass::Input:
+  case SPIRV::StorageClass::Output:
+  case SPIRV::StorageClass::Workgroup:
+  case SPIRV::StorageClass::CrossWorkgroup:
+  case SPIRV::StorageClass::Private:
+  case SPIRV::StorageClass::Function:
+  case SPIRV::StorageClass::Generic:
+  case SPIRV::StorageClass::AtomicCounter:
+  case SPIRV::StorageClass::Image:
+  case SPIRV::StorageClass::CallableDataNV:
+  case SPIRV::StorageClass::IncomingCallableDataNV:
+  case SPIRV::StorageClass::RayPayloadNV:
+  case SPIRV::StorageClass::HitAttributeNV:
+  case SPIRV::StorageClass::IncomingRayPayloadNV:
+  case SPIRV::StorageClass::ShaderRecordBufferNV:
+  case SPIRV::StorageClass::CodeSectionINTEL:
+  case SPIRV::StorageClass::DeviceOnlyINTEL:
+  case SPIRV::StorageClass::HostOnlyINTEL:
+    return false;
+  default:
+    llvm_unreachable("Unknown storage class");
+    return false;
+  }
+}
 } // anonymous namespace
 
 SPIRVGlobalRegistry::SPIRVGlobalRegistry(unsigned PointerSize)
@@ -1097,13 +1129,6 @@ SPIRVType *SPIRVGlobalRegistry::createSPIRVType(
     bool ExplicitLayoutRequired, bool EmitIR) {
   if (isSpecialOpaqueType(Ty))
     return getOrCreateSpecialType(Ty, MIRBuilder, AccQual);
-  auto &TypeToSPIRVTypeMap = DT.getTypes()->getAllUses();
-  auto t = TypeToSPIRVTypeMap.find(Ty);
-  if (t != TypeToSPIRVTypeMap.end()) {
-    auto tt = t->second.find(&MIRBuilder.getMF());
-    if (tt != t->second.end())
-      return getSPIRVTypeForVReg(tt->second);
-  }
 
   if (auto IType = dyn_cast<IntegerType>(Ty)) {
     const unsigned Width = IType->getBitWidth();
@@ -1145,17 +1170,18 @@ SPIRVType *SPIRVGlobalRegistry::createSPIRVType(
 
   unsigned AddrSpace = typeToAddressSpace(Ty);
   SPIRVType *SpvElementType = nullptr;
-  // TODO: If an explict layout is required depends on the address space.
+
+  const SPIRVSubtarget *ST =
+      static_cast<const SPIRVSubtarget *>(&MIRBuilder.getMF().getSubtarget());
+  auto SC = addressSpaceToStorageClass(AddrSpace, *ST);
+
+  ExplicitLayoutRequired = storageClassRequiresExplictLayout(SC);
   if (Type *ElemTy = ::getPointeeType(Ty))
     SpvElementType = getOrCreateSPIRVType(ElemTy, MIRBuilder, AccQual,
                                           ExplicitLayoutRequired, EmitIR);
   else
     SpvElementType = getOrCreateSPIRVIntegerType(8, MIRBuilder);
 
-  // Get access to information about available extensions
-  const SPIRVSubtarget *ST =
-      static_cast<const SPIRVSubtarget *>(&MIRBuilder.getMF().getSubtarget());
-  auto SC = addressSpaceToStorageClass(AddrSpace, *ST);
   // Null pointer means we have a loop in type definitions, make and
   // return corresponding OpTypeForwardPointer.
   if (SpvElementType == nullptr) {
@@ -1171,7 +1197,7 @@ SPIRVType *SPIRVGlobalRegistry::createSPIRVType(
     return getOpTypePointer(SC, SpvElementType, MIRBuilder, Reg);
   }
 
-  return getOrCreateSPIRVPointerType(SpvElementType, MIRBuilder, SC);
+  return getOrCreateSPIRVPointerTypeInternal(SpvElementType, MIRBuilder, SC);
 }
 
 SPIRVType *SPIRVGlobalRegistry::restOfCreateSPIRVType(
@@ -1431,11 +1457,11 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateVulkanBufferType(
   if (auto *Res = checkSpecialInstr(TD, MIRBuilder))
     return Res;
 
-  // TODO: Check that I will not collide with a similar struct that does not
-  // have the decorations.
+  bool ExplicitLayoutRequired = storageClassRequiresExplictLayout(SC);
   auto *T = StructType::create(ElemType);
-  auto *BlockType = getOrCreateSPIRVType(
-      T, MIRBuilder, SPIRV::AccessQualifier::None, true, EmitIr);
+  auto *BlockType =
+      getOrCreateSPIRVType(T, MIRBuilder, SPIRV::AccessQualifier::None,
+                           ExplicitLayoutRequired, EmitIr);
 
   buildOpDecorate(BlockType->defs().begin()->getReg(), MIRBuilder,
                   SPIRV::Decoration::Block, {});
@@ -1445,7 +1471,7 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateVulkanBufferType(
                           SPIRV::Decoration::NonWritable, 0, {});
   }
 
-  SPIRVType *R = getOrCreateSPIRVPointerType(BlockType, MIRBuilder, SC);
+  SPIRVType *R = getOrCreateSPIRVPointerTypeInternal(BlockType, MIRBuilder, SC);
   DT.add(TD, &MIRBuilder.getMF(), getSPIRVTypeID(R));
   return R;
 }
@@ -1746,6 +1772,40 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVArrayType(
 }
 
 SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVPointerType(
+    Type *BaseType, MachineInstr &I, SPIRV::StorageClass::StorageClass SC) {
+  MachineIRBuilder MIRBuilder(I);
+  return getOrCreateSPIRVPointerType(BaseType, MIRBuilder, SC);
+}
+
+SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVPointerType(
+    Type *BaseType, MachineIRBuilder &MIRBuilder,
+    SPIRV::StorageClass::StorageClass SC) {
+  bool ExplicitLayoutRequired = storageClassRequiresExplictLayout(SC);
+  SPIRVType *SpirvBaseType = getOrCreateSPIRVType(
+      BaseType, MIRBuilder, SPIRV::AccessQualifier::ReadWrite,
+      ExplicitLayoutRequired, true);
+  return getOrCreateSPIRVPointerTypeInternal(SpirvBaseType, MIRBuilder, SC);
+}
+
+SPIRVType *SPIRVGlobalRegistry::changePointerStorageClass(
+    SPIRVType *PtrType, SPIRV::StorageClass::StorageClass SC, MachineInstr &I) {
+  SPIRV::StorageClass::StorageClass OldSC = getPointerStorageClass(PtrType);
+  assert(storageClassRequiresExplictLayout(OldSC) ==
+         storageClassRequiresExplictLayout(SC));
+
+  SPIRVType *PointeeType = getPointeeType(PtrType);
+  MachineIRBuilder MIRBuilder(I);
+  return getOrCreateSPIRVPointerTypeInternal(PointeeType, MIRBuilder, SC);
+}
+
+SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVPointerType(
+    SPIRVType *BaseType, MachineIRBuilder &MIRBuilder,
+    SPIRV::StorageClass::StorageClass SC) {
+  assert(!storageClassRequiresExplictLayout(SC));
+  return getOrCreateSPIRVPointerTypeInternal(BaseType, MIRBuilder, SC);
+}
+
+SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVPointerTypeInternal(
     SPIRVType *BaseType, MachineIRBuilder &MIRBuilder,
     SPIRV::StorageClass::StorageClass SC) {
   const Type *PointerElementType = getTypeForSPIRVType(BaseType);
@@ -1768,13 +1828,6 @@ SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVPointerType(
     finishCreatingSPIRVType(LLVMTy, MIB);
     return MIB;
   });
-}
-
-SPIRVType *SPIRVGlobalRegistry::getOrCreateSPIRVPointerType(
-    SPIRVType *BaseType, MachineInstr &I, const SPIRVInstrInfo &,
-    SPIRV::StorageClass::StorageClass SC) {
-  MachineIRBuilder MIRBuilder(I);
-  return getOrCreateSPIRVPointerType(BaseType, MIRBuilder, SC);
 }
 
 Register SPIRVGlobalRegistry::getOrCreateUndef(MachineInstr &I,

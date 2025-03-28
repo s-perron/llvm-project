@@ -240,7 +240,9 @@ class SPIRVGeneralDuplicatesTracker {
 public:
   void add(const Type *Ty, bool ExplicitLayoutRequired,
            const MachineFunction *MF, Register R) {
-    SPIRVDuplicatesTracker<Type> &Tracker = ExplicitLayoutRequired ? LTT : TT;
+    SPIRVDuplicatesTracker<Type> &Tracker =
+        ExplicitLayoutRequired && (Ty->isArrayTy() || Ty->isStructTy()) ? LTT
+                                                                        : TT;
     Tracker.add(unifyPtrType(Ty), MF, R);
   }
 
@@ -277,7 +279,9 @@ public:
 
   Register find(const Type *Ty, bool ExplicitLayoutRequired,
                 const MachineFunction *MF) {
-    SPIRVDuplicatesTracker<Type> &Tracker = ExplicitLayoutRequired ? LTT : TT;
+    SPIRVDuplicatesTracker<Type> &Tracker =
+        ExplicitLayoutRequired && (Ty->isArrayTy() || Ty->isStructTy()) ? LTT
+                                                                        : TT;
     return Tracker.find(unifyPtrType(Ty), MF);
   }
 
@@ -311,8 +315,6 @@ public:
                 const MachineFunction *MF) {
     return ST.find(TD, MF);
   }
-
-  const SPIRVDuplicatesTracker<Type> *getTypes() { return &TT; }
 };
 } // namespace llvm
 #endif // LLVM_LIB_TARGET_SPIRV_SPIRVDUPLICATESTRACKER_H

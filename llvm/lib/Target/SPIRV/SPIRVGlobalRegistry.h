@@ -342,6 +342,12 @@ public:
   // EmitIR controls if we emit GMIR or SPV constants (e.g. for array sizes)
   // because this method may be called from InstructionSelector and we don't
   // want to emit extra IR instructions there.
+  SPIRVType *getOrCreateSPIRVType(const Type *Type, MachineInstr &I,
+                                  SPIRV::AccessQualifier::AccessQualifier AQ,
+                                  bool EmitIR) {
+    MachineIRBuilder MIRBuilder(I);
+    return getOrCreateSPIRVType(Type, MIRBuilder, AQ, EmitIR);
+  }
   SPIRVType *getOrCreateSPIRVType(const Type *Type,
                                   MachineIRBuilder &MIRBuilder,
                                   SPIRV::AccessQualifier::AccessQualifier AQ,
@@ -529,6 +535,10 @@ private:
   void addArrayStrideDecorations(Register Reg, Type *ElementType,
                                  MachineIRBuilder &MIRBuilder);
 
+  SPIRVType *getOrCreateSPIRVPointerTypeInternal(
+      SPIRVType *BaseType, MachineIRBuilder &MIRBuilder,
+      SPIRV::StorageClass::StorageClass SClass = SPIRV::StorageClass::Function);
+
 public:
   Register buildConstantInt(uint64_t Val, MachineIRBuilder &MIRBuilder,
                             SPIRVType *SpvType, bool EmitIR,
@@ -599,11 +609,27 @@ public:
                                        const SPIRVInstrInfo &TII);
 
   SPIRVType *getOrCreateSPIRVPointerType(
+      Type *BaseType, MachineIRBuilder &MIRBuilder,
+      SPIRV::StorageClass::StorageClass SClass = SPIRV::StorageClass::Function);
+
+  SPIRVType *getOrCreateSPIRVPointerType(
+      Type *BaseType, MachineInstr &I,
+      SPIRV::StorageClass::StorageClass SClass = SPIRV::StorageClass::Function);
+  SPIRVType *changePointerStorageClass(SPIRVType *PtrType,
+                                       SPIRV::StorageClass::StorageClass SC,
+                                       MachineInstr &I);
+
+  SPIRVType *getOrCreateSPIRVPointerType(
       SPIRVType *BaseType, MachineIRBuilder &MIRBuilder,
       SPIRV::StorageClass::StorageClass SClass = SPIRV::StorageClass::Function);
-  SPIRVType *getOrCreateSPIRVPointerType(
-      SPIRVType *BaseType, MachineInstr &I, const SPIRVInstrInfo &TII,
-      SPIRV::StorageClass::StorageClass SClass = SPIRV::StorageClass::Function);
+
+  SPIRVType *
+  getOrCreateSPIRVPointerType(SPIRVType *BaseType, MachineInstr &I,
+                              SPIRV::StorageClass::StorageClass SClass =
+                                  SPIRV::StorageClass::Function) {
+    MachineIRBuilder MIRBuilder(I);
+    return getOrCreateSPIRVPointerType(BaseType, MIRBuilder, SClass);
+  }
 
   SPIRVType *getOrCreateVulkanBufferType(MachineIRBuilder &MIRBuilder,
                                          Type *ElemType,
