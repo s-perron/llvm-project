@@ -1209,8 +1209,10 @@ bool SPIRVInstructionSelector::selectMemOperation(Register ResVReg,
     unsigned Val = getIConstVal(I.getOperand(1).getReg(), MRI);
     unsigned Num = getIConstVal(I.getOperand(2).getReg(), MRI);
     Type *ValTy =
-        Type::getInt8Ty(I.getMF()->getFunction().getContext()); // GR.getOrCreateSPIRVIntegerType(8,
-                                                                // I, TII);
+        Type::getInt8Ty(I.getMF()
+                            ->getFunction()
+                            .getContext()); // GR.getOrCreateSPIRVIntegerType(8,
+                                            // I, TII);
     Type *ArrTy = ArrayType::get(
         ValTy, Num); // GR.getOrCreateSPIRVArrayType(ValTy, Num, I, TII);
     SPIRVType *SpvArrTy =
