@@ -13,13 +13,13 @@ RasterizerOrderedStructuredBuffer<float> Buf5 : register(u1, space2);
 #endif
 
 // CHECK-DXIL: %"class.hlsl::StructuredBuffer" = type { target("dx.RawBuffer", float, 0, 0) }
-// CHECK-DXIL: %"class.hlsl::RWStructuredBuffer" = type { target("dx.RawBuffer", float, 1, 0) }
-// CHECK-DXIL: %"class.hlsl::AppendStructuredBuffer" = type { target("dx.RawBuffer", float, 1, 0) }
-// CHECK-DXIL: %"class.hlsl::ConsumeStructuredBuffer" = type { target("dx.RawBuffer", float, 1, 0) }
-// CHECK-DXIL: %"class.hlsl::RasterizerOrderedStructuredBuffer" = type { target("dx.RawBuffer", float, 1, 1) }
+// CHECK-DXIL: %"class.hlsl::RWStructuredBuffer" = type { target("dx.RawBuffer", float, 1, 0), target("dx.RawBuffer", float, 1, 0) }
+// CHECK-DXIL: %"class.hlsl::AppendStructuredBuffer" = type { target("dx.RawBuffer", float, 1, 0), target("dx.RawBuffer", float, 1, 0) }
+// CHECK-DXIL: %"class.hlsl::ConsumeStructuredBuffer" = type { target("dx.RawBuffer", float, 1, 0), target("dx.RawBuffer", float, 1, 0) }
+// CHECK-DXIL: %"class.hlsl::RasterizerOrderedStructuredBuffer" = type { target("dx.RawBuffer", float, 1, 1), target("dx.RawBuffer", float, 1, 1) }
 
 // CHECK-SPIRV: %"class.hlsl::StructuredBuffer" = type { target("spirv.VulkanBuffer", [0 x float], 12, 0) }
-// CHECK-SPIRV: %"class.hlsl::RWStructuredBuffer" = type { target("spirv.VulkanBuffer", [0 x float], 12, 1) }
+// CHECK-SPIRV: %"class.hlsl::RWStructuredBuffer" = type { target("spirv.VulkanBuffer", [0 x float], 12, 1), target("spirv.VulkanBuffer", i32, 2, 1) }
 
 
 // CHECK: @_ZL3Buf = internal global %"class.hlsl::StructuredBuffer" poison
@@ -54,12 +54,12 @@ RasterizerOrderedStructuredBuffer<float> Buf5 : register(u1, space2);
 
 // CHECK: define linkonce_odr void @_ZN4hlsl16StructuredBufferIfEC2Ev(ptr noundef nonnull align {{[48]}} dereferenceable({{[48]}}) %this)
 // CHECK-NEXT: entry:
-// CHECK-DXIL: define linkonce_odr void @_ZN4hlsl18RWStructuredBufferIfEC2Ev(ptr noundef nonnull align 4 dereferenceable(4) %this)
+// CHECK-DXIL: define linkonce_odr void @_ZN4hlsl18RWStructuredBufferIfEC2Ev(ptr noundef nonnull align 4 dereferenceable(8) %this)
 // CHECK-DXIL-NEXT: entry:
-// CHECK-DXIL: define linkonce_odr void @_ZN4hlsl22AppendStructuredBufferIfEC2Ev(ptr noundef nonnull align 4 dereferenceable(4) %this)
+// CHECK-DXIL: define linkonce_odr void @_ZN4hlsl22AppendStructuredBufferIfEC2Ev(ptr noundef nonnull align 4 dereferenceable(8) %this)
 // CHECK-DXIL-NEXT: entry:
-// CHECK-DXIL: define linkonce_odr void @_ZN4hlsl23ConsumeStructuredBufferIfEC2Ev(ptr noundef nonnull align 4 dereferenceable(4) %this)
-// CHECK-DXIL: define linkonce_odr void @_ZN4hlsl33RasterizerOrderedStructuredBufferIfEC2Ev(ptr noundef nonnull align 4 dereferenceable(4) %this)
+// CHECK-DXIL: define linkonce_odr void @_ZN4hlsl23ConsumeStructuredBufferIfEC2Ev(ptr noundef nonnull align 4 dereferenceable(8) %this)
+// CHECK-DXIL: define linkonce_odr void @_ZN4hlsl33RasterizerOrderedStructuredBufferIfEC2Ev(ptr noundef nonnull align 4 dereferenceable(8) %this)
 // CHECK-DXIL-NEXT: entry:
 
 // CHECK: define {{.*}} void @_GLOBAL__sub_I_StructuredBuffers_constructors.hlsl()

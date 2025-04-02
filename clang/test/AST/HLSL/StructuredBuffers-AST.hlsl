@@ -88,6 +88,11 @@ RESOURCE<float> Buffer;
 // CHECK-UAV-SAME{LITERAL}: [[hlsl::resource_class(UAV)]]
 // CHECK-SAME{LITERAL}: [[hlsl::raw_buffer]]
 // CHECK-SAME{LITERAL}: [[hlsl::contained_type(element_type)]]
+// CHECK-UAV-NEXT: FieldDecl {{.*}} implicit __counter_handle '__hlsl_resource_t
+// CHECK-UAV-SAME{LITERAL}: [[hlsl::resource_class(UAV)]]
+// CHECK-UAV-SAME{LITERAL}: [[hlsl::raw_buffer]]
+// CHECK-UAV-SAME{LITERAL}: [[hlsl::counter]]
+// CHECK-UAV-SAME{LITERAL}: [[hlsl::contained_type(element_type)]]
 
 // CHECK-SUBSCRIPT: CXXMethodDecl {{.*}} operator[] 'const element_type &(unsigned int) const'
 // CHECK-SUBSCRIPT-NEXT: ParmVarDecl {{.*}} Index 'unsigned int'

@@ -626,6 +626,30 @@ BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addHandleMember(
   return *this;
 }
 
+BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addCounterHandleMember(
+    ResourceClass RC, bool IsROV, bool RawBuffer, AccessSpecifier Access) {
+  assert(!Record->isCompleteDefinition() && "record is already complete");
+
+  ASTContext &Ctx = SemaRef.getASTContext();
+  TypeSourceInfo *ElementTypeInfo =
+      Ctx.getTrivialTypeSourceInfo(getHandleElementType(), SourceLocation());
+
+  // add handle member with resource type attributes
+  QualType AttributedResTy = QualType();
+  SmallVector<const Attr *> Attrs = {
+      HLSLResourceClassAttr::CreateImplicit(Ctx, RC),
+      IsROV ? HLSLROVAttr::CreateImplicit(Ctx) : nullptr,
+      RawBuffer ? HLSLRawBufferAttr::CreateImplicit(Ctx) : nullptr,
+      ElementTypeInfo
+          ? HLSLContainedTypeAttr::CreateImplicit(Ctx, ElementTypeInfo)
+          : nullptr,
+      HLSLCounterAttr::CreateImplicit(Ctx)};
+  if (CreateHLSLAttributedResourceType(SemaRef, Ctx.HLSLResourceTy, Attrs,
+                                       AttributedResTy))
+    addMemberVariable("__counter_handle", AttributedResTy, {}, Access);
+  return *this;
+}
+
 // Adds default constructor to the resource class:
 // Resource::Resource()
 BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addDefaultHandleConstructor() {

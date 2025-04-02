@@ -74,6 +74,9 @@ public:
   BuiltinTypeDeclBuilder &
   addHandleMember(ResourceClass RC, bool IsROV, bool RawBuffer,
                   AccessSpecifier Access = AccessSpecifier::AS_private);
+  BuiltinTypeDeclBuilder &
+  addCounterHandleMember(ResourceClass RC, bool IsROV, bool RawBuffer,
+                         AccessSpecifier Access = AccessSpecifier::AS_private);
   BuiltinTypeDeclBuilder &addArraySubscriptOperators();
 
   // Builtin types methods
