@@ -436,6 +436,12 @@ void SPIRVTargetLowering::finalizeLowering(MachineFunction &MF) const {
         if (MI.getNumOperands() == 4)
           validateAccessChain(STI, MRI, GR, MI);
         break;
+        /* Keep in case I need later. Remove before merging if not.
+      case SPIRV::OpAccessChain:
+      case SPIRV::OpInBoundsAccessChain:
+        fixAccessChain(STI, MRI, GR, MI);
+        break;
+        */
 
       case SPIRV::OpFunctionCall:
         // ensure there is no mismatch between actual and expected arg types:
@@ -623,4 +629,48 @@ bool SPIRVTargetLowering::insertLogicalCopyOnResult(
       .addUse(NewResultReg)
       .constrainAllUses(*STI.getInstrInfo(), *STI.getRegisterInfo(),
                         *STI.getRegBankInfo());
+}
+
+void SPIRVTargetLowering::fixAccessChain(const SPIRVSubtarget &subtarget,
+                                         MachineRegisterInfo *p_info,
+                                         SPIRVGlobalRegistry &registry,
+                                         MachineInstr &instr) const {
+  assert(instr.getOpcode() == SPIRV::OpAccessChain ||
+         instr.getOpcode() == SPIRV::OpInBoundsAccessChain);
+
+  SPIRVType *ResultType =
+      registry.getSPIRVTypeForVReg(instr.getOperand(1).getReg());
+
+  // Walk the access chain
+  SPIRVType *SourceType = registry.getResultType(instr.getOperand(2).getReg());
+  SPIRVType *SourcePointeeType = registry.getPointeeType(SourceType);
+  for (uint32_t I = 3; I < instr.getNumOperands(); ++I) {
+    switch (SourcePointeeType->getOpcode()) {
+    case SPIRV::OpTypeStruct: {
+      uint64_t Index = getIConstVal(instr.getOperand(I).getReg(), p_info);
+      SourcePointeeType = registry.getSPIRVTypeForVReg(
+          SourcePointeeType->getOperand(Index + 1).getReg());
+      break;
+    }
+    case SPIRV::OpTypeArray:
+    case SPIRV::OpTypePointer:
+    case SPIRV::OpTypeVector:
+    case SPIRV::OpTypeMatrix:
+      SourcePointeeType = registry.getSPIRVTypeForVReg(
+          SourcePointeeType->getOperand(2).getReg());
+      break;
+    default:
+      llvm_unreachable("Unexpected aggregate type");
+      break;
+    }
+  }
+
+  MachineIRBuilder MIB(instr);
+  SourceType = registry.getOrCreateSPIRVPointerType(
+      SourcePointeeType, MIB, registry.getPointerStorageClass(SourceType));
+
+  if (SourceType == ResultType)
+    return;
+
+  instr.getOperand(1).setReg(SourceType->defs().begin()->getReg());
 }

@@ -122,10 +122,15 @@ class SPIRVLegalizePointerCast : public FunctionPass {
 
     B.SetInsertPoint(LI);
 
+    // The load already has the correct type. No work to do.
+    if (FromTy == ToTy) {
+      llvm_unreachable("Can we get to this case?");
+      Output = LI;
+    }
     // Destination is the element type of Source, and source is an array ->
     // Loading 1st element.
     // - float a = array[0];
-    if (SAT && SAT->getElementType() == ToTy)
+    else if (SAT && SAT->getElementType() == ToTy)
       Output = loadFirstValueFromAggregate(B, SAT->getElementType(),
                                            OriginalOperand, LI);
     // Destination is the element type of Source, and source is a vector ->
@@ -144,8 +149,12 @@ class SPIRVLegalizePointerCast : public FunctionPass {
     // - float v = s.m;
     else if (SST && SST->getTypeAtIndex(0u) == ToTy)
       Output = loadFirstValueFromAggregate(B, ToTy, OriginalOperand, LI);
-    else
+    else {
+      LI->dump();
+      ToTy->dump();
+      FromTy->dump();
       llvm_unreachable("Unimplemented implicit down-cast from load.");
+    }
 
     GR->replaceAllUsesWith(LI, Output, /* DeleteOld= */ true);
     DeadInstructions.push_back(LI);

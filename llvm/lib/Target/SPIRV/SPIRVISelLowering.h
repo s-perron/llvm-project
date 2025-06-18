@@ -76,6 +76,9 @@ public:
                                    unsigned OpIdx) const;
   bool insertLogicalCopyOnResult(MachineInstr &I,
                                  SPIRVType *NewResultType) const;
+  void fixAccessChain(const SPIRVSubtarget &subtarget,
+                      MachineRegisterInfo *p_info,
+                      SPIRVGlobalRegistry &registry, MachineInstr &instr) const;
 };
 } // namespace llvm
 
