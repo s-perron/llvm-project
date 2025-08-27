@@ -73,6 +73,14 @@ struct ResourceBindingAttrs {
   void setImplicitOrderID(unsigned Value) const {
     assert(hasBinding() && !isExplicit() && !hasImplicitOrderID());
     RegBinding->setImplicitBindingOrderID(Value);
+
+  bool hasCounterImplicitOrderID() const {
+    return RegBinding && RegBinding->hasImplicitCounterBindingOrderID();
+  }
+
+  unsigned getCounterImplicitOrderID() const {
+    assert(hasCounterImplicitOrderID());
+    return RegBinding->getImplicitCounterBindingOrderID();
   }
 };
 

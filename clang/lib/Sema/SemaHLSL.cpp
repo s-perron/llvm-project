@@ -2973,6 +2973,26 @@ bool SemaHLSL::CheckBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
     TheCall->setType(ResourceTy);
     break;
   }
+  case Builtin::BI__builtin_hlsl_resource_counterhandlefrombinding:
+  case Builtin::BI__builtin_hlsl_resource_counterhandlefromimplicitbinding: {
+    ASTContext &AST = SemaRef.getASTContext();
+    if (SemaRef.checkArgCount(TheCall, 3) ||
+        CheckResourceHandle(&SemaRef, TheCall, 0) ||
+        CheckArgTypeMatches(&SemaRef, TheCall->getArg(1), AST.UnsignedIntTy) ||
+        CheckArgTypeMatches(&SemaRef, TheCall->getArg(2), AST.UnsignedIntTy))
+      return true;
+
+    QualType MainHandleTy = TheCall->getArg(0)->getType();
+    auto *MainResType = MainHandleTy->getAs<HLSLAttributedResourceType>();
+    auto MainAttrs = MainResType->getAttrs();
+    assert(!MainAttrs.IsCounter && "cannot create a counter from a counter");
+    MainAttrs.IsCounter = true;
+    QualType CounterHandleTy = getASTContext().getHLSLAttributedResourceType(
+        MainResType->getWrappedType(), MainResType->getContainedType(),
+        MainAttrs);
+    TheCall->setType(CounterHandleTy);
+    break;
+  }
   case Builtin::BI__builtin_hlsl_and:
   case Builtin::BI__builtin_hlsl_or: {
     if (SemaRef.checkArgCount(TheCall, 2))
@@ -3778,6 +3798,7 @@ void SemaHLSL::ActOnVariableDeclarator(VarDecl *VD) {
     processExplicitBindingsOnDecl(VD);
 
     if (VD->getType()->isHLSLResourceRecordArray()) {
+      // TODO: Can I used the recently added ResourceBindingAttrs?
       // If the resource array does not have an explicit binding attribute,
       // create an implicit one. It will be used to transfer implicit binding
       // order_ID to codegen.
@@ -3790,6 +3811,26 @@ void SemaHLSL::ActOnVariableDeclarator(VarDecl *VD) {
           addImplicitBindingAttrToDecl(
               SemaRef, VD, getRegisterType(getResourceArrayHandleType(VD)),
               OrderID);
+      }
+
+      // TODO: Is there an existing function I can call? If not, we should write
+      // one or find a better way to determine if a counter is needed.
+      //
+      // Get to the base type of a potentially multi-dimensional array.
+      QualType Ty = VD->getType();
+      while (Ty->isArrayType())
+        Ty = Ty->getAsArrayTypeUnsafe()->getElementType();
+
+      const CXXRecordDecl *RD = Ty->getAsCXXRecordDecl();
+      StringRef Name = RD->getName();
+      if (Name == "RWStructuredBuffer" || Name == "AppendStructuredBuffer" ||
+          Name == "ConsumeStructuredBuffer" ||
+          Name == "RasterizerOrderedStructuredBuffer") {
+        HLSLResourceBindingAttr *RBA = VD->getAttr<HLSLResourceBindingAttr>();
+        if (!RBA->hasImplicitCounterBindingOrderID()) {
+          uint32_t OrderID = getNextImplicitBindingOrderID();
+          RBA->setImplicitCounterBindingOrderID(OrderID);
+        }
       }
     }
   }
@@ -3814,19 +3855,30 @@ bool SemaHLSL::initGlobalResourceDecl(VarDecl *VD) {
   CXXMethodDecl *CreateMethod = nullptr;
   llvm::SmallVector<Expr *> Args;
 
+  // TODO: This should be determined by whether or not Binding has a bining for
+  // the counter variable.
+  bool HasCounter =
+      std::distance(ResourceDecl->field_begin(), ResourceDecl->field_end()) > 1;
+
   if (Binding.isExplicit()) {
     // The resource has explicit binding.
-    CreateMethod = lookupMethod(SemaRef, ResourceDecl, "__createFromBinding",
-                                VD->getLocation());
+    // TODO: See if this could be moved into binding.
+    CreateMethod =
+        lookupMethod(SemaRef, ResourceDecl,
+                     HasCounter ? "__createFromBindingWithImplicitCounter"
+                                : "__createFromBinding",
+                     VD->getLocation());
     IntegerLiteral *RegSlot =
         IntegerLiteral::Create(AST, llvm::APInt(UIntTySize, Binding.getSlot()),
                                AST.UnsignedIntTy, SourceLocation());
     Args.push_back(RegSlot);
   } else {
     // The resource has implicit binding.
-    CreateMethod =
-        lookupMethod(SemaRef, ResourceDecl, "__createFromImplicitBinding",
-                     VD->getLocation());
+    CreateMethod = lookupMethod(
+        SemaRef, ResourceDecl,
+        HasCounter ? "__createFromImplicitBindingWithImplicitCounter"
+                   : "__createFromImplicitBinding",
+        VD->getLocation());
     uint32_t OrderID = (Binding.hasImplicitOrderID())
                            ? Binding.getImplicitOrderID()
                            : getNextImplicitBindingOrderID();
@@ -3864,6 +3916,15 @@ bool SemaHLSL::initGlobalResourceDecl(VarDecl *VD) {
       AST, AST.getPointerType(AST.CharTy.withConst()), CK_ArrayToPointerDecay,
       Name, nullptr, VK_PRValue, FPOptionsOverride());
   Args.push_back(NameCast);
+
+  if (HasCounter) {
+    // Will this be in the correct order?
+    uint32_t CounterOrderID = getNextImplicitBindingOrderID();
+    IntegerLiteral *CounterId =
+        IntegerLiteral::Create(AST, llvm::APInt(UIntTySize, CounterOrderID),
+                               AST.UnsignedIntTy, SourceLocation());
+    Args.push_back(CounterId);
+  }
 
   // Make sure the create method template is instantiated and emitted.
   if (!CreateMethod->isDefined() && CreateMethod->isTemplateInstantiation())
@@ -3910,15 +3971,23 @@ bool SemaHLSL::initGlobalResourceArrayDecl(VarDecl *VD) {
   HLSLVkBindingAttr *VkBinding = VD->getAttr<HLSLVkBindingAttr>();
   CXXMethodDecl *CreateMethod = nullptr;
 
+  bool HasCounter =
+      std::distance(ResourceDecl->field_begin(), ResourceDecl->field_end()) > 1;
+
   if (VkBinding || (RBA && RBA->hasRegisterSlot()))
     // Resource has explicit binding.
-    CreateMethod = lookupMethod(SemaRef, ResourceDecl, "__createFromBinding",
-                                VD->getLocation());
+    CreateMethod =
+        lookupMethod(SemaRef, ResourceDecl,
+                     HasCounter ? "__createFromBindingWithImplicitCounter"
+                                : "__createFromBinding",
+                     VD->getLocation());
   else
     // Resource has implicit binding.
-    CreateMethod =
-        lookupMethod(SemaRef, ResourceDecl, "__createFromImplicitBinding",
-                     VD->getLocation());
+    CreateMethod = lookupMethod(
+        SemaRef, ResourceDecl,
+        HasCounter ? "__createFromImplicitBindingWithImplicitCounter"
+                   : "__createFromImplicitBinding",
+        VD->getLocation());
 
   if (!CreateMethod)
     return false;

@@ -48,16 +48,16 @@ export void foo() {
 // CHECK-DXIL: store target("dx.RawBuffer", float, 0, 0) %[[Handle1]], ptr %__handle, align 4
 // CHECK: call void @hlsl::StructuredBuffer<float>::StructuredBuffer(hlsl::StructuredBuffer<float> const&)(ptr {{.*}} %[[RetValue1]], ptr {{.*}} %[[Tmp1]])
 
-// Buf2 initialization part 1 - global init function that calls RWStructuredBuffer<float>::__createFromImplicitBinding
+// Buf2 initialization part 1 - global init function that calls RWStructuredBuffer<float>::__createFromImplicitBindingWithImplicitCounter
 // CHECK: define internal void @__cxx_global_var_init.1()
 // CHECK-NEXT: entry:
-// CHECK-NEXT: call void @hlsl::RWStructuredBuffer<float>::__createFromImplicitBinding(unsigned int, unsigned int, int, unsigned int, char const*)
-// CHECK-SAME: (ptr {{.*}} @Buf2, i32 noundef 0, i32 noundef 0, i32 noundef 1, i32 noundef 0, ptr noundef @[[Buf2Str]])
+// CHECK-NEXT: call void @hlsl::RWStructuredBuffer<float>::__createFromImplicitBindingWithImplicitCounter(unsigned int, unsigned int, int, unsigned int, char const*, unsigned int)
+// CHECK-SAME: (ptr {{.*}} @Buf2, i32 noundef 0, i32 noundef 0, i32 noundef 1, i32 noundef 0, ptr noundef @[[Buf2Str]], i32 noundef 1)
 
-// Buf2 initialization part 2 - body of RWStructuredBuffer<float>::__createFromImplicitBinding
-// CHECK: define linkonce_odr hidden void @hlsl::RWStructuredBuffer<float>::__createFromImplicitBinding(unsigned int, unsigned int, int, unsigned int, char const*)
+// Buf2 initialization part 2 - body of RWStructuredBuffer<float>::__createFromImplicitBindingWithImplicitCounter
+// CHECK: define linkonce_odr hidden void @hlsl::RWStructuredBuffer<float>::__createFromImplicitBindingWithImplicitCounter(unsigned int, unsigned int, int, unsigned int, char const*, unsigned int)
 // CHECK-SAME: (ptr {{.*}} sret(%"class.hlsl::RWStructuredBuffer") align 4 %[[RetValue2:.*]], i32 noundef %orderId, 
-// CHECK-SAME: i32 noundef %spaceNo, i32 noundef %range, i32 noundef %index, ptr noundef %name)
+// CHECK-SAME: i32 noundef %spaceNo, i32 noundef %range, i32 noundef %index, ptr noundef %name, i32 noundef %counterOrderId)
 // CHECK: %[[Tmp2:.*]] = alloca %"class.hlsl::RWStructuredBuffer", align 4
 // CHECK-DXIL: %[[Handle2:.*]] = call target("dx.RawBuffer", float, 1, 0)
 // CHECK-DXIL-SAME: @llvm.dx.resource.handlefromimplicitbinding.tdx.RawBuffer_f32_1_0t(
