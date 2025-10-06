@@ -3798,7 +3798,6 @@ void SemaHLSL::ActOnVariableDeclarator(VarDecl *VD) {
     processExplicitBindingsOnDecl(VD);
 
     if (VD->getType()->isHLSLResourceRecordArray()) {
-      // TODO: Can I used the recently added ResourceBindingAttrs?
       // If the resource array does not have an explicit binding attribute,
       // create an implicit one. It will be used to transfer implicit binding
       // order_ID to codegen.
@@ -3813,8 +3812,8 @@ void SemaHLSL::ActOnVariableDeclarator(VarDecl *VD) {
               OrderID);
       }
 
-      // TODO: Is there an existing function I can call? If not, we should write
-      // one or find a better way to determine if a counter is needed.
+      // TODO: Is there an existing function I can call to get the base type for
+      // the array?
       //
       // Get to the base type of a potentially multi-dimensional array.
       QualType Ty = VD->getType();
@@ -3823,9 +3822,13 @@ void SemaHLSL::ActOnVariableDeclarator(VarDecl *VD) {
 
       const CXXRecordDecl *RD = Ty->getAsCXXRecordDecl();
       StringRef Name = RD->getName();
+      // TOOD: Instead of checking the name, change if RD has a second member
+      // and that member is a resource handle.
       if (Name == "RWStructuredBuffer" || Name == "AppendStructuredBuffer" ||
           Name == "ConsumeStructuredBuffer" ||
           Name == "RasterizerOrderedStructuredBuffer") {
+        // TODO: Use calls in the Binding to set the orderid instead of using
+        // the resource.
         HLSLResourceBindingAttr *RBA = VD->getAttr<HLSLResourceBindingAttr>();
         if (!RBA->hasImplicitCounterBindingOrderID()) {
           uint32_t OrderID = getNextImplicitBindingOrderID();
@@ -3855,30 +3858,38 @@ bool SemaHLSL::initGlobalResourceDecl(VarDecl *VD) {
   CXXMethodDecl *CreateMethod = nullptr;
   llvm::SmallVector<Expr *> Args;
 
-  // TODO: This should be determined by whether or not Binding has a bining for
-  // the counter variable.
-  bool HasCounter =
-      std::distance(ResourceDecl->field_begin(), ResourceDecl->field_end()) > 1;
+  // Check that the second field is a counter resource handle.
+  bool HasCounter = false;
+  if (!ResourceDecl->field_empty()) {
+    auto It = std::next(ResourceDecl->field_begin());
+    if (It != ResourceDecl->field_end()) {
+      const FieldDecl *SecondField = *It;
+      if (const auto *ResTy =
+              SecondField->getType()->getAs<HLSLAttributedResourceType>()) {
+        HasCounter = ResTy->getAttrs().IsCounter;
+      }
+    }
+  }
+
+  StringRef CreateMethodName;
+  if (Binding.isExplicit()) {
+    CreateMethodName = HasCounter ? "__createFromBindingWithImplicitCounter"
+                                  : "__createFromBinding";
+  } else {
+    CreateMethodName = HasCounter
+                           ? "__createFromImplicitBindingWithImplicitCounter"
+                           : "__createFromImplicitBinding";
+  }
+  CreateMethod =
+      lookupMethod(SemaRef, ResourceDecl, CreateMethodName, VD->getLocation());
+  assert(CreateMethod && "Failed to get create method for global resource.");
 
   if (Binding.isExplicit()) {
-    // The resource has explicit binding.
-    // TODO: See if this could be moved into binding.
-    CreateMethod =
-        lookupMethod(SemaRef, ResourceDecl,
-                     HasCounter ? "__createFromBindingWithImplicitCounter"
-                                : "__createFromBinding",
-                     VD->getLocation());
     IntegerLiteral *RegSlot =
         IntegerLiteral::Create(AST, llvm::APInt(UIntTySize, Binding.getSlot()),
                                AST.UnsignedIntTy, SourceLocation());
     Args.push_back(RegSlot);
   } else {
-    // The resource has implicit binding.
-    CreateMethod = lookupMethod(
-        SemaRef, ResourceDecl,
-        HasCounter ? "__createFromImplicitBindingWithImplicitCounter"
-                   : "__createFromImplicitBinding",
-        VD->getLocation());
     uint32_t OrderID = (Binding.hasImplicitOrderID())
                            ? Binding.getImplicitOrderID()
                            : getNextImplicitBindingOrderID();

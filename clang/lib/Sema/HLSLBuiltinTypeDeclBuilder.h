@@ -84,6 +84,7 @@ public:
 
   // Static create methods
   BuiltinTypeDeclBuilder &addStaticInitializationFunctions(bool HasCounter);
+  // TODO: Make addCreateFromBinding and addCreateFromImplicitBinding private.
   BuiltinTypeDeclBuilder &addCreateFromBinding();
   BuiltinTypeDeclBuilder &addCreateFromImplicitBinding();
   BuiltinTypeDeclBuilder &addCreateFromBindingWithImplicitCounter();
