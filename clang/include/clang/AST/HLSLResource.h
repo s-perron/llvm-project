@@ -74,15 +74,15 @@ struct ResourceBindingAttrs {
     assert(hasBinding() && !isExplicit() && !hasImplicitOrderID());
     RegBinding->setImplicitBindingOrderID(Value);
 
-  bool hasCounterImplicitOrderID() const {
-    return RegBinding && RegBinding->hasImplicitCounterBindingOrderID();
-  }
+    bool hasCounterImplicitOrderID() const {
+      return RegBinding && RegBinding->hasImplicitCounterBindingOrderID();
+    }
 
-  unsigned getCounterImplicitOrderID() const {
-    assert(hasCounterImplicitOrderID());
-    return RegBinding->getImplicitCounterBindingOrderID();
-  }
-};
+    unsigned getCounterImplicitOrderID() const {
+      assert(hasCounterImplicitOrderID());
+      return RegBinding->getImplicitCounterBindingOrderID();
+    }
+  };
 
 } // namespace hlsl
 

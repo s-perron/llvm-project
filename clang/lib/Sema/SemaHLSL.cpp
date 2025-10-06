@@ -3872,14 +3872,14 @@ bool SemaHLSL::initGlobalResourceDecl(VarDecl *VD) {
   }
 
   StringRef CreateMethodName;
-  if (Binding.isExplicit()) {
+  if (Binding.isExplicit())
     CreateMethodName = HasCounter ? "__createFromBindingWithImplicitCounter"
                                   : "__createFromBinding";
-  } else {
+  else
     CreateMethodName = HasCounter
                            ? "__createFromImplicitBindingWithImplicitCounter"
                            : "__createFromImplicitBinding";
-  }
+
   CreateMethod =
       lookupMethod(SemaRef, ResourceDecl, CreateMethodName, VD->getLocation());
   assert(CreateMethod && "Failed to get create method for global resource.");
@@ -3982,9 +3982,12 @@ bool SemaHLSL::initGlobalResourceArrayDecl(VarDecl *VD) {
   HLSLVkBindingAttr *VkBinding = VD->getAttr<HLSLVkBindingAttr>();
   CXXMethodDecl *CreateMethod = nullptr;
 
+  // TODO: Use `Binding` as in other places.
   bool HasCounter =
       std::distance(ResourceDecl->field_begin(), ResourceDecl->field_end()) > 1;
 
+  // TODO: Have the if-statement get the name only. Then have a single call to
+  // lookupMethod after.
   if (VkBinding || (RBA && RBA->hasRegisterSlot()))
     // Resource has explicit binding.
     CreateMethod =
