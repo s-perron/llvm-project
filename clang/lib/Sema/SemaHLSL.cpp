@@ -1240,6 +1240,20 @@ static CXXMethodDecl *lookupMethod(Sema &S, CXXRecordDecl *RecordDecl,
 
 } // end anonymous namespace
 
+static bool hasCounterHandle(const CXXRecordDecl *RD) {
+  if (RD->field_empty())
+    return false;
+  auto It = std::next(RD->field_begin());
+  if (It == RD->field_end())
+    return false;
+  const FieldDecl *SecondField = *It;
+  if (const auto *ResTy =
+          SecondField->getType()->getAs<HLSLAttributedResourceType>()) {
+    return ResTy->getAttrs().IsCounter;
+  }
+  return false;
+}
+
 bool SemaHLSL::handleRootSignatureElements(
     ArrayRef<hlsl::RootSignatureElement> Elements) {
   // Define some common error handling functions
@@ -3812,27 +3826,14 @@ void SemaHLSL::ActOnVariableDeclarator(VarDecl *VD) {
               OrderID);
       }
 
-      // TODO: Is there an existing function I can call to get the base type for
-      // the array?
-      //
       // Get to the base type of a potentially multi-dimensional array.
-      QualType Ty = VD->getType();
-      while (Ty->isArrayType())
-        Ty = Ty->getAsArrayTypeUnsafe()->getElementType();
+      QualType Ty = getASTContext().getBaseElementType(VD->getType());
 
       const CXXRecordDecl *RD = Ty->getAsCXXRecordDecl();
-      StringRef Name = RD->getName();
-      // TOOD: Instead of checking the name, change if RD has a second member
-      // and that member is a resource handle.
-      if (Name == "RWStructuredBuffer" || Name == "AppendStructuredBuffer" ||
-          Name == "ConsumeStructuredBuffer" ||
-          Name == "RasterizerOrderedStructuredBuffer") {
-        // TODO: Use calls in the Binding to set the orderid instead of using
-        // the resource.
-        HLSLResourceBindingAttr *RBA = VD->getAttr<HLSLResourceBindingAttr>();
-        if (!RBA->hasImplicitCounterBindingOrderID()) {
+      if (hasCounterHandle(RD)) {
+        if (!Binding.hasCounterImplicitOrderID()) {
           uint32_t OrderID = getNextImplicitBindingOrderID();
-          RBA->setImplicitCounterBindingOrderID(OrderID);
+          Binding.setCounterImplicitOrderID(OrderID);
         }
       }
     }
@@ -3858,20 +3859,8 @@ bool SemaHLSL::initGlobalResourceDecl(VarDecl *VD) {
   CXXMethodDecl *CreateMethod = nullptr;
   llvm::SmallVector<Expr *> Args;
 
-  // Check that the second field is a counter resource handle.
-  bool HasCounter = false;
-  if (!ResourceDecl->field_empty()) {
-    auto It = std::next(ResourceDecl->field_begin());
-    if (It != ResourceDecl->field_end()) {
-      const FieldDecl *SecondField = *It;
-      if (const auto *ResTy =
-              SecondField->getType()->getAs<HLSLAttributedResourceType>()) {
-        HasCounter = ResTy->getAttrs().IsCounter;
-      }
-    }
-  }
-
-  StringRef CreateMethodName;
+  bool HasCounter = hasCounterHandle(ResourceDecl);
+  std::string CreateMethodName;
   if (Binding.isExplicit())
     CreateMethodName = HasCounter ? "__createFromBindingWithImplicitCounter"
                                   : "__createFromBinding";
@@ -3882,7 +3871,16 @@ bool SemaHLSL::initGlobalResourceDecl(VarDecl *VD) {
 
   CreateMethod =
       lookupMethod(SemaRef, ResourceDecl, CreateMethodName, VD->getLocation());
-  assert(CreateMethod && "Failed to get create method for global resource.");
+  if (!CreateMethod) {
+    llvm::dbgs() << "STEVEN: failed to get method " << CreateMethodName << "\n";
+    VD->dumpColor();
+  }
+
+  if (!CreateMethod)
+    // This can happen if someone creates a struct that looks like an HLSL
+    // resource record but does not have the required static create method.
+    // No binding will be generated for it.
+    return false;
 
   if (Binding.isExplicit()) {
     IntegerLiteral *RegSlot =
@@ -3898,12 +3896,6 @@ bool SemaHLSL::initGlobalResourceDecl(VarDecl *VD) {
                                AST.UnsignedIntTy, SourceLocation());
     Args.push_back(OrderId);
   }
-
-  if (!CreateMethod)
-    // This can happen if someone creates a struct that looks like an HLSL
-    // resource record but does not have the required static create method.
-    // No binding will be generated for it.
-    return false;
 
   IntegerLiteral *Space =
       IntegerLiteral::Create(AST, llvm::APInt(UIntTySize, Binding.getSpace()),
@@ -3982,13 +3974,9 @@ bool SemaHLSL::initGlobalResourceArrayDecl(VarDecl *VD) {
   HLSLVkBindingAttr *VkBinding = VD->getAttr<HLSLVkBindingAttr>();
   CXXMethodDecl *CreateMethod = nullptr;
 
-  // TODO: Use `Binding` as in other places.
-  bool HasCounter =
-      std::distance(ResourceDecl->field_begin(), ResourceDecl->field_end()) > 1;
-
-  // TODO: Have the if-statement get the name only. Then have a single call to
-  // lookupMethod after.
-  if (VkBinding || (RBA && RBA->hasRegisterSlot()))
+  bool HasCounter = hasCounterHandle(ResourceDecl);
+  ResourceBindingAttrs ResourceAttrs(VD);
+  if (ResourceAttrs.isExplicit())
     // Resource has explicit binding.
     CreateMethod =
         lookupMethod(SemaRef, ResourceDecl,

@@ -84,9 +84,6 @@ public:
 
   // Static create methods
   BuiltinTypeDeclBuilder &addStaticInitializationFunctions(bool HasCounter);
-  // TODO: Make addCreateFromBinding and addCreateFromImplicitBinding private.
-  BuiltinTypeDeclBuilder &addCreateFromBinding();
-  BuiltinTypeDeclBuilder &addCreateFromImplicitBinding();
   BuiltinTypeDeclBuilder &addCreateFromBindingWithImplicitCounter();
   BuiltinTypeDeclBuilder &addCreateFromImplicitBindingWithImplicitCounter();
 
@@ -100,6 +97,8 @@ public:
   BuiltinTypeDeclBuilder &addConsumeMethod();
 
 private:
+  BuiltinTypeDeclBuilder &addCreateFromBinding();
+  BuiltinTypeDeclBuilder &addCreateFromImplicitBinding();
   BuiltinTypeDeclBuilder &addResourceMember(StringRef MemberName,
                                             ResourceClass RC, bool IsROV,
                                             bool RawBuffer, bool IsCounter,

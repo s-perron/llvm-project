@@ -209,6 +209,11 @@ private:
     if (!Method)
       createDecl();
   }
+
+  template <typename ResourceT, typename ValueT>
+  BuiltinTypeMethodBuilder &setFieldOnResource(ResourceT ResourceRecord,
+                                               ValueT HandleValue,
+                                               FieldDecl *HandleField);
 };
 
 TemplateParameterListBuilder::~TemplateParameterListBuilder() {
@@ -596,37 +601,27 @@ template <typename ResourceT, typename ValueT>
 BuiltinTypeMethodBuilder &
 BuiltinTypeMethodBuilder::setHandleFieldOnResource(ResourceT ResourceRecord,
                                                    ValueT HandleValue) {
-  ensureCompleteDecl();
-
-  Expr *ResourceExpr = convertPlaceholder(ResourceRecord);
-  Expr *HandleValueExpr = convertPlaceholder(HandleValue);
-
-  ASTContext &AST = DeclBuilder.SemaRef.getASTContext();
-  FieldDecl *HandleField = DeclBuilder.getResourceHandleField();
-  MemberExpr *HandleMemberExpr = MemberExpr::CreateImplicit(
-      AST, ResourceExpr, false, HandleField, HandleField->getType(), VK_LValue,
-      OK_Ordinary);
-  Stmt *AssignStmt = BinaryOperator::Create(
-      DeclBuilder.SemaRef.getASTContext(), HandleMemberExpr, HandleValueExpr,
-      BO_Assign, HandleMemberExpr->getType(), ExprValueKind::VK_PRValue,
-      ExprObjectKind::OK_Ordinary, SourceLocation(), FPOptionsOverride());
-  StmtsList.push_back(AssignStmt);
-  return *this;
+  return setFieldOnResource(ResourceRecord, HandleValue,
+                            DeclBuilder.getResourceHandleField());
 }
 
-// TODO: Can we factor out code common to
-// BuiltinTypeMethodBuilder::setHandleFieldOnResource?
 template <typename ResourceT, typename ValueT>
 BuiltinTypeMethodBuilder &
 BuiltinTypeMethodBuilder::setCounterHandleFieldOnResource(
     ResourceT ResourceRecord, ValueT HandleValue) {
+  return setFieldOnResource(ResourceRecord, HandleValue,
+                            DeclBuilder.getResourceCounterHandleField());
+}
+
+template <typename ResourceT, typename ValueT>
+BuiltinTypeMethodBuilder &BuiltinTypeMethodBuilder::setFieldOnResource(
+    ResourceT ResourceRecord, ValueT HandleValue, FieldDecl *HandleField) {
   ensureCompleteDecl();
 
   Expr *ResourceExpr = convertPlaceholder(ResourceRecord);
   Expr *HandleValueExpr = convertPlaceholder(HandleValue);
 
   ASTContext &AST = DeclBuilder.SemaRef.getASTContext();
-  FieldDecl *HandleField = DeclBuilder.getResourceCounterHandleField();
   MemberExpr *HandleMemberExpr = MemberExpr::CreateImplicit(
       AST, ResourceExpr, false, HandleField, HandleField->getType(), VK_LValue,
       OK_Ordinary);
