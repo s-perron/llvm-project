@@ -1997,6 +1997,9 @@ def err_mismatched_exception_spec : Error<
   "exception specification in declaration does not match previous declaration">;
 def ext_mismatched_exception_spec : ExtWarn<err_mismatched_exception_spec.Summary>,
   InGroup<MicrosoftExceptionSpec>;
+def err_hlsl_counter_binding_no_counter
+    : Error<"'counter_binding' attribute only applies to resources that have a "
+            "counter">;
 def err_override_exception_spec : Error<
   "exception specification of overriding function is more lax than "
   "base version">;

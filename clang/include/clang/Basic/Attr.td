@@ -4929,6 +4929,14 @@ def HLSLVkBinding : InheritableAttr {
   let Documentation = [HLSLVkBindingDocs];
 }
 
+def HLSLVkCounterBinding : InheritableAttr {
+  let Spellings = [CXX11<"vk", "counter_binding">];
+  let Subjects = SubjectList<[HLSLBufferObj, ExternalGlobalVar], ErrorDiag>;
+  let Args = [IntArgument<"Binding">];
+  let LangOpts = [HLSL];
+  let Documentation = [HLSLVkCounterBindingDocs];
+}
+
 def HLSLResourceBinding: InheritableAttr {
   let Spellings = [HLSLAnnotation<"register">];
   let Subjects = SubjectList<[HLSLBufferObj, ExternalGlobalVar], ErrorDiag>;

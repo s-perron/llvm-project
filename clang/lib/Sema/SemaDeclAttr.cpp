@@ -7490,6 +7490,9 @@ ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D, const ParsedAttr &AL,
   case ParsedAttr::AT_HLSLVkBinding:
     S.HLSL().handleVkBindingAttr(D, AL);
     break;
+  case ParsedAttr::AT_HLSLVkCounterBinding:
+    S.HLSL().handleVkCounterBindingAttr(D, AL);
+    break;
   case ParsedAttr::AT_HLSLGroupSharedAddressSpace:
     handleSimpleAttribute<HLSLGroupSharedAddressSpaceAttr>(S, D, AL);
     break;

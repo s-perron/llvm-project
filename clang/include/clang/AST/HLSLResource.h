@@ -32,17 +32,21 @@ namespace hlsl {
 struct ResourceBindingAttrs {
   HLSLResourceBindingAttr *RegBinding;
   HLSLVkBindingAttr *VkBinding;
+  HLSLVkCounterBindingAttr *VkCounterBinding;
 
   ResourceBindingAttrs(const Decl *D) {
     RegBinding = D->getAttr<HLSLResourceBindingAttr>();
     bool IsSpirv = D->getASTContext().getTargetInfo().getTriple().isSPIRV();
     VkBinding = IsSpirv ? D->getAttr<HLSLVkBindingAttr>() : nullptr;
+    VkCounterBinding =
+        IsSpirv ? D->getAttr<HLSLVkCounterBindingAttr>() : nullptr;
   }
 
   bool hasBinding() const { return RegBinding || VkBinding; }
   bool isExplicit() const {
     return (RegBinding && RegBinding->hasRegisterSlot()) || VkBinding;
   }
+  bool isExplicitCounterBinding() const { return VkCounterBinding; }
 
   unsigned getSlot() const {
     assert(isExplicit() && "no explicit binding");
@@ -59,6 +63,11 @@ struct ResourceBindingAttrs {
     if (RegBinding)
       return RegBinding->getSpaceNumber();
     return 0;
+  }
+
+  unsigned getCounterBinding() const {
+    assert(VkCounterBinding && "no explicit counter binding");
+    return VkCounterBinding->getBinding();
   }
 
   bool hasImplicitOrderID() const {

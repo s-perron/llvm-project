@@ -1615,6 +1615,30 @@ void SemaHLSL::handleVkBindingAttr(Decl *D, const ParsedAttr &AL) {
                  HLSLVkBindingAttr(getASTContext(), AL, Binding, Set));
 }
 
+void SemaHLSL::handleVkCounterBindingAttr(Decl *D, const ParsedAttr &AL) {
+  uint32_t Binding = 0;
+  if (!SemaRef.checkUInt32Argument(AL, AL.getArgAsExpr(0), Binding))
+    return;
+
+  const auto *VD = cast<VarDecl>(D);
+  const Type *Ty = VD->getType().getTypePtr();
+  const CXXRecordDecl *RD = Ty->getAsCXXRecordDecl();
+  if (Ty->isHLSLResourceRecordArray()) {
+    const Type *ElemTy = Ty;
+    while (ElemTy->isArrayType())
+      ElemTy = ElemTy->castAsArrayTypeUnsafe()->getElementType().getTypePtr();
+    RD = ElemTy->getAsCXXRecordDecl();
+  }
+
+  if (!RD || !hasCounterHandle(RD)) {
+    Diag(D->getLocation(), diag::err_hlsl_counter_binding_no_counter);
+    return;
+  }
+
+  D->addAttr(::new (getASTContext())
+                 HLSLVkCounterBindingAttr(getASTContext(), AL, Binding));
+}
+
 bool SemaHLSL::diagnoseInputIDType(QualType T, const ParsedAttr &AL) {
   const auto *VT = T->getAs<VectorType>();
 
@@ -3827,7 +3851,8 @@ void SemaHLSL::ActOnVariableDeclarator(VarDecl *VD) {
 
       const CXXRecordDecl *RD = Ty->getAsCXXRecordDecl();
       if (hasCounterHandle(RD)) {
-        if (!Binding.hasCounterImplicitOrderID()) {
+        if (!Binding.isExplicitCounterBinding() &&
+            !Binding.hasCounterImplicitOrderID()) {
           uint32_t OrderID = getNextImplicitBindingOrderID();
           Binding.setCounterImplicitOrderID(OrderID);
         }
@@ -3857,13 +3882,26 @@ bool SemaHLSL::initGlobalResourceDecl(VarDecl *VD) {
 
   bool HasCounter = hasCounterHandle(ResourceDecl);
   const char *CreateMethodName;
-  if (Binding.isExplicit())
-    CreateMethodName = HasCounter ? "__createFromBindingWithImplicitCounter"
-                                  : "__createFromBinding";
-  else
-    CreateMethodName = HasCounter
-                           ? "__createFromImplicitBindingWithImplicitCounter"
-                           : "__createFromImplicitBinding";
+
+  if (Binding.isExplicit()) {
+    if (HasCounter) {
+      if (Binding.isExplicitCounterBinding())
+        CreateMethodName = "__createFromBindingWithCounter";
+      else
+        CreateMethodName = "__createFromBindingWithImplicitCounter";
+    } else {
+      CreateMethodName = "__createFromBinding";
+    }
+  } else {
+    if (HasCounter) {
+      if (Binding.isExplicitCounterBinding())
+        CreateMethodName = "__createFromImplicitBindingWithCounter";
+      else
+        CreateMethodName = "__createFromImplicitBindingWithImplicitCounter";
+    } else {
+      CreateMethodName = "__createFromImplicitBinding";
+    }
+  }
 
   CreateMethod =
       lookupMethod(SemaRef, ResourceDecl, CreateMethodName, VD->getLocation());
@@ -3913,12 +3951,19 @@ bool SemaHLSL::initGlobalResourceDecl(VarDecl *VD) {
   Args.push_back(NameCast);
 
   if (HasCounter) {
-    // Will this be in the correct order?
-    uint32_t CounterOrderID = getNextImplicitBindingOrderID();
-    IntegerLiteral *CounterId =
-        IntegerLiteral::Create(AST, llvm::APInt(UIntTySize, CounterOrderID),
-                               AST.UnsignedIntTy, SourceLocation());
-    Args.push_back(CounterId);
+    if (Binding.isExplicitCounterBinding()) {
+      IntegerLiteral *CounterBinding = IntegerLiteral::Create(
+          AST, llvm::APInt(UIntTySize, Binding.getCounterBinding()),
+          AST.UnsignedIntTy, SourceLocation());
+      Args.push_back(CounterBinding);
+    } else {
+      // Will this be in the correct order?
+      uint32_t CounterOrderID = getNextImplicitBindingOrderID();
+      IntegerLiteral *CounterId =
+          IntegerLiteral::Create(AST, llvm::APInt(UIntTySize, CounterOrderID),
+                                 AST.UnsignedIntTy, SourceLocation());
+      Args.push_back(CounterId);
+    }
   }
 
   // Make sure the create method template is instantiated and emitted.
@@ -3965,20 +4010,29 @@ bool SemaHLSL::initGlobalResourceArrayDecl(VarDecl *VD) {
 
   bool HasCounter = hasCounterHandle(ResourceDecl);
   ResourceBindingAttrs ResourceAttrs(VD);
-  if (ResourceAttrs.isExplicit())
-    // Resource has explicit binding.
-    CreateMethod =
-        lookupMethod(SemaRef, ResourceDecl,
-                     HasCounter ? "__createFromBindingWithImplicitCounter"
-                                : "__createFromBinding",
-                     VD->getLocation());
-  else
-    // Resource has implicit binding.
-    CreateMethod = lookupMethod(
-        SemaRef, ResourceDecl,
-        HasCounter ? "__createFromImplicitBindingWithImplicitCounter"
-                   : "__createFromImplicitBinding",
-        VD->getLocation());
+  const char *CreateMethodName;
+  if (ResourceAttrs.isExplicit()) {
+    if (HasCounter) {
+      if (ResourceAttrs.isExplicitCounterBinding())
+        CreateMethodName = "__createFromBindingWithCounter";
+      else
+        CreateMethodName = "__createFromBindingWithImplicitCounter";
+    } else {
+      CreateMethodName = "__createFromBinding";
+    }
+  } else {
+    if (HasCounter) {
+      if (ResourceAttrs.isExplicitCounterBinding())
+        CreateMethodName = "__createFromImplicitBindingWithCounter";
+      else
+        CreateMethodName = "__createFromImplicitBindingWithImplicitCounter";
+    } else {
+      CreateMethodName = "__createFromImplicitBinding";
+    }
+  }
+
+  CreateMethod =
+      lookupMethod(SemaRef, ResourceDecl, CreateMethodName, VD->getLocation());
 
   if (!CreateMethod)
     return false;

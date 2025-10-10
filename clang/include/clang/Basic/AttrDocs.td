@@ -8974,6 +8974,20 @@ The descriptor set is optional and defaults to 0 if not provided.
   }];
 }
 
+def HLSLVkCounterBindingDocs : Documentation {
+  let Category = DocCatVariable;
+  let Content = [{
+The `vk::counter_binding` attribute is a SPIR-V specific attribute that
+specifies the binding for the counter buffer associated with a UAV.
+
+For example:
+```
+[[vk::binding(0, 0), vk::counter_binding(1)]]
+RWStructuredBuffer<float> g_rw_buffer_explicit;
+```
+  }];
+}
+
 def WebAssemblyFuncrefDocs : Documentation {
   let Category = DocCatType;
   let Content = [{

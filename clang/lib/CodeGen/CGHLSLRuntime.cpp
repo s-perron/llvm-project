@@ -145,25 +145,37 @@ static CXXMethodDecl *lookupResourceInitMethodAndSetupArgs(
     // explicit binding
     auto *RegSlot = llvm::ConstantInt::get(CGM.IntTy, Binding.getSlot());
     Args.add(RValue::get(RegSlot), AST.UnsignedIntTy);
-    const char *Name = Binding.hasCounterImplicitOrderID()
-                           ? "__createFromBindingWithImplicitCounter"
-                           : "__createFromBinding";
+    const char *Name;
+    if (Binding.isExplicitCounterBinding())
+      Name = "__createFromBindingWithCounter";
+    else if (Binding.hasCounterImplicitOrderID())
+      Name = "__createFromBindingWithImplicitCounter";
+    else
+      Name = "__createFromBinding";
     CreateMethod = lookupMethod(ResourceDecl, Name, SC_Static);
   } else {
     // implicit binding
     auto *OrderID =
         llvm::ConstantInt::get(CGM.IntTy, Binding.getImplicitOrderID());
     Args.add(RValue::get(OrderID), AST.UnsignedIntTy);
-    const char *Name = Binding.hasCounterImplicitOrderID()
-                           ? "__createFromImplicitBindingWithImplicitCounter"
-                           : "__createFromImplicitBinding";
+    const char *Name;
+    if (Binding.isExplicitCounterBinding())
+      Name = "__createFromImplicitBindingWithCounter";
+    else if (Binding.hasCounterImplicitOrderID())
+      Name = "__createFromImplicitBindingWithImplicitCounter";
+    else
+      Name = "__createFromImplicitBinding";
     CreateMethod = lookupMethod(ResourceDecl, Name, SC_Static);
   }
   Args.add(RValue::get(Space), AST.UnsignedIntTy);
   Args.add(RValue::get(Range), AST.IntTy);
   Args.add(RValue::get(Index), AST.UnsignedIntTy);
   Args.add(RValue::get(NameStr), AST.getPointerType(AST.CharTy.withConst()));
-  if (Binding.hasCounterImplicitOrderID()) {
+  if (Binding.isExplicitCounterBinding()) {
+    uint32_t CounterBinding = Binding.getCounterBinding();
+    auto *CounterBindingId = llvm::ConstantInt::get(CGM.IntTy, CounterBinding);
+    Args.add(RValue::get(CounterBindingId), AST.UnsignedIntTy);
+  } else if (Binding.hasCounterImplicitOrderID()) {
     uint32_t CounterBinding = Binding.getCounterImplicitOrderID();
     auto *CounterOrderID = llvm::ConstantInt::get(CGM.IntTy, CounterBinding);
     Args.add(RValue::get(CounterOrderID), AST.UnsignedIntTy);
