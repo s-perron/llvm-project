@@ -774,6 +774,8 @@ void CGHLSLRuntime::emitSystemSemanticStore(IRBuilder<> &B, llvm::Value *Source,
       createSPIRVBuiltinStore(B, CGM.getModule(), Source,
                               Semantic->getAttrName()->getName(),
                               /* BuiltIn::Position */ 0);
+  } else if (SemanticName == "SV_TARGET") {
+    emitUserSemanticStore(B, Source, Decl, Semantic, Index);
   } else
     llvm_unreachable("non-handled system semantic. FIXME.");
 }
