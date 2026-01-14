@@ -17,10 +17,9 @@
 #include "clang/AST/Type.h"
 #include "clang/Sema/Sema.h"
 #include "llvm/ADT/StringMap.h"
-#include "llvm/Support/DXILABI.h"
 
 using llvm::hlsl::ResourceClass;
-using llvm::dxil::ResourceDimension;
+using llvm::hlsl::ResourceDimension;
 
 namespace clang {
 
@@ -80,9 +79,7 @@ public:
   BuiltinTypeDeclBuilder &
   addTextureHandle(ResourceClass RC, bool IsROV, ResourceDimension RD,
                    AccessSpecifier Access = AccessSpecifier::AS_private);
-  BuiltinTypeDeclBuilder &
-  addSamplerHandle(ResourceClass RC,
-                   AccessSpecifier Access = AccessSpecifier::AS_private);
+  BuiltinTypeDeclBuilder &addSamplerHandle();
   BuiltinTypeDeclBuilder &addArraySubscriptOperators();
 
   // Builtin types constructors
@@ -113,16 +110,16 @@ private:
   BuiltinTypeDeclBuilder &addCreateFromBindingWithImplicitCounter();
   BuiltinTypeDeclBuilder &addCreateFromImplicitBindingWithImplicitCounter();
   BuiltinTypeDeclBuilder &addResourceMember(StringRef MemberName,
-                                            ResourceClass RC, ResourceDimension RD,
-                                            bool IsROV, bool RawBuffer,
-                                            bool IsCounter,
+                                            ResourceClass RC,
+                                            ResourceDimension RD, bool IsROV,
+                                            bool RawBuffer, bool IsCounter,
                                             AccessSpecifier Access);
   BuiltinTypeDeclBuilder &
-  addHandleMember(ResourceClass RC, ResourceDimension RD, bool IsROV, bool RawBuffer,
+  addHandleMember(ResourceClass RC, ResourceDimension RD, bool IsROV,
+                  bool RawBuffer,
                   AccessSpecifier Access = AccessSpecifier::AS_private);
   BuiltinTypeDeclBuilder &
-  addCounterHandleMember(ResourceClass RC, ResourceDimension RD, bool IsROV,
-                         bool RawBuffer,
+  addCounterHandleMember(ResourceClass RC, bool IsROV, bool RawBuffer,
                          AccessSpecifier Access = AccessSpecifier::AS_private);
   FieldDecl *getResourceHandleField() const;
   FieldDecl *getResourceCounterHandleField() const;

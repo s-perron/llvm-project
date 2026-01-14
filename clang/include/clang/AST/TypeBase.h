@@ -6710,18 +6710,20 @@ public:
     uint8_t IsCounter : 1;
 
     Attributes(llvm::dxil::ResourceClass ResourceClass,
-               llvm::dxil::ResourceDimension ResourceDimension, bool IsROV = false,
-               bool RawBuffer = false, bool IsCounter = false)
+               llvm::dxil::ResourceDimension ResourceDimension,
+               bool IsROV = false, bool RawBuffer = false,
+               bool IsCounter = false)
         : ResourceClass(ResourceClass), ResourceDimension(ResourceDimension),
           IsROV(IsROV), RawBuffer(RawBuffer), IsCounter(IsCounter) {}
 
     Attributes(llvm::dxil::ResourceClass ResourceClass)
-        : Attributes(ResourceClass, llvm::dxil::ResourceDimension::Invalid) {}
+        : Attributes(ResourceClass,
+                     llvm::dxil::ResourceDimension::DimensionUnknown) {}
 
     Attributes()
         : Attributes(llvm::dxil::ResourceClass::UAV,
-                     llvm::dxil::ResourceDimension::Invalid, false, false,
-                     false) {}
+                     llvm::dxil::ResourceDimension::DimensionUnknown, false,
+                     false, false) {}
 
     friend bool operator==(const Attributes &LHS, const Attributes &RHS) {
       return std::tie(LHS.ResourceClass, LHS.ResourceDimension, LHS.IsROV,

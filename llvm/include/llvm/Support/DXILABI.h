@@ -32,7 +32,7 @@ enum class ResourceClass : uint8_t {
 };
 
 enum class ResourceDimension : uint8_t {
-  Invalid = 0,
+  DimensionUnknown = 0,
   Dimension1D,
   Dimension2D,
   Dimension3D,

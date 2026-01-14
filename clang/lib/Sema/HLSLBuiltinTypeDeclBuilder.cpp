@@ -177,8 +177,6 @@ private:
   Expr *convertPlaceholder(LocalVar &Var);
   Expr *convertPlaceholder(Expr *E) { return E; }
 
-  FieldDecl *lookupField(Expr *ResourceExpr, StringRef FieldName);
-
 public:
   friend BuiltinTypeDeclBuilder;
 
@@ -243,7 +241,7 @@ private:
   template <typename ResourceT, typename ValueT>
   BuiltinTypeMethodBuilder &setFieldOnResource(ResourceT ResourceRecord,
                                                ValueT HandleValue,
-                                               StringRef FieldName);
+                                               FieldDecl *HandleField);
 };
 
 TemplateParameterListBuilder::~TemplateParameterListBuilder() {
@@ -427,24 +425,6 @@ Expr *BuiltinTypeMethodBuilder::convertPlaceholder(LocalVar &Var) {
       VD->getASTContext(), NestedNameSpecifierLoc(), SourceLocation(), VD,
       false, DeclarationNameInfo(VD->getDeclName(), SourceLocation()),
       VD->getType(), VK_LValue);
-}
-
-FieldDecl *BuiltinTypeMethodBuilder::lookupField(Expr *ResourceExpr,
-                                                 StringRef FieldName) {
-  CXXRecordDecl *RD = ResourceExpr->getType()->getAsCXXRecordDecl();
-  if (RD == DeclBuilder.Record) {
-    if (FieldName == "__handle")
-      return DeclBuilder.getResourceHandleField();
-    if (FieldName == "__counter_handle")
-      return DeclBuilder.getResourceCounterHandleField();
-  }
-  DeclarationName Name =
-      &DeclBuilder.SemaRef.getASTContext().Idents.get(FieldName);
-  LookupResult R(DeclBuilder.SemaRef, Name, SourceLocation(),
-                 Sema::LookupMemberName);
-  DeclBuilder.SemaRef.LookupQualifiedName(R, RD);
-  assert(!R.empty() && "Field not found");
-  return dyn_cast<FieldDecl>(R.getFoundDecl());
 }
 
 BuiltinTypeMethodBuilder::BuiltinTypeMethodBuilder(BuiltinTypeDeclBuilder &DB,
@@ -683,12 +663,9 @@ BuiltinTypeMethodBuilder::accessHandleFieldOnResource(T ResourceRecord) {
          "Getting the field from the wrong resource type.");
 
   ASTContext &AST = DeclBuilder.SemaRef.getASTContext();
-  FieldDecl *HandleField = lookupField(ResourceExpr, "__handle");
-  QualType FieldTy = HandleField->getType();
-  if (ResourceExpr->getType().isConstQualified())
-    FieldTy.addConst();
+  FieldDecl *HandleField = DeclBuilder.getResourceHandleField();
   MemberExpr *HandleExpr = MemberExpr::CreateImplicit(
-      AST, ResourceExpr, false, HandleField, FieldTy, VK_LValue,
+      AST, ResourceExpr, false, HandleField, HandleField->getType(), VK_LValue,
       OK_Ordinary);
   StmtsList.push_back(HandleExpr);
   return *this;
@@ -698,19 +675,21 @@ template <typename ResourceT, typename ValueT>
 BuiltinTypeMethodBuilder &
 BuiltinTypeMethodBuilder::setHandleFieldOnResource(ResourceT ResourceRecord,
                                                    ValueT HandleValue) {
-  return setFieldOnResource(ResourceRecord, HandleValue, "__handle");
+  return setFieldOnResource(ResourceRecord, HandleValue,
+                            DeclBuilder.getResourceHandleField());
 }
 
 template <typename ResourceT, typename ValueT>
 BuiltinTypeMethodBuilder &
 BuiltinTypeMethodBuilder::setCounterHandleFieldOnResource(
     ResourceT ResourceRecord, ValueT HandleValue) {
-  return setFieldOnResource(ResourceRecord, HandleValue, "__counter_handle");
+  return setFieldOnResource(ResourceRecord, HandleValue,
+                            DeclBuilder.getResourceCounterHandleField());
 }
 
 template <typename ResourceT, typename ValueT>
 BuiltinTypeMethodBuilder &BuiltinTypeMethodBuilder::setFieldOnResource(
-    ResourceT ResourceRecord, ValueT HandleValue, StringRef FieldName) {
+    ResourceT ResourceRecord, ValueT HandleValue, FieldDecl *HandleField) {
   ensureCompleteDecl();
 
   Expr *ResourceExpr = convertPlaceholder(ResourceRecord);
@@ -720,13 +699,9 @@ BuiltinTypeMethodBuilder &BuiltinTypeMethodBuilder::setFieldOnResource(
 
   Expr *HandleValueExpr = convertPlaceholder(HandleValue);
 
-  FieldDecl *HandleField = lookupField(ResourceExpr, FieldName);
   ASTContext &AST = DeclBuilder.SemaRef.getASTContext();
-  QualType FieldTy = HandleField->getType();
-  if (ResourceExpr->getType().isConstQualified())
-    FieldTy.addConst();
   MemberExpr *HandleMemberExpr = MemberExpr::CreateImplicit(
-      AST, ResourceExpr, false, HandleField, FieldTy, VK_LValue,
+      AST, ResourceExpr, false, HandleField, HandleField->getType(), VK_LValue,
       OK_Ordinary);
   Stmt *AssignStmt = BinaryOperator::Create(
       DeclBuilder.SemaRef.getASTContext(), HandleMemberExpr, HandleValueExpr,
@@ -746,12 +721,9 @@ BuiltinTypeMethodBuilder::accessCounterHandleFieldOnResource(T ResourceRecord) {
          "Getting the field from the wrong resource type.");
 
   ASTContext &AST = DeclBuilder.SemaRef.getASTContext();
-  FieldDecl *HandleField = lookupField(ResourceExpr, "__counter_handle");
-  QualType FieldTy = HandleField->getType();
-  if (ResourceExpr->getType().isConstQualified())
-    FieldTy.addConst();
+  FieldDecl *HandleField = DeclBuilder.getResourceCounterHandleField();
   MemberExpr *HandleExpr = MemberExpr::CreateImplicit(
-      AST, ResourceExpr, false, HandleField, FieldTy, VK_LValue,
+      AST, ResourceExpr, false, HandleField, HandleField->getType(), VK_LValue,
       OK_Ordinary);
   StmtsList.push_back(HandleExpr);
   return *this;
@@ -900,27 +872,46 @@ BuiltinTypeDeclBuilder &
 BuiltinTypeDeclBuilder::addBufferHandles(ResourceClass RC, bool IsROV,
                                          bool RawBuffer, bool HasCounter,
                                          AccessSpecifier Access) {
-  addHandleMember(RC, IsROV, RawBuffer, Access);
+  addHandleMember(RC, ResourceDimension::DimensionUnknown, IsROV, RawBuffer,
+                  Access);
   if (HasCounter)
     addCounterHandleMember(RC, IsROV, RawBuffer, Access);
   return *this;
 }
 
-BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addHandleMember(
-    ResourceClass RC, bool IsROV, bool RawBuffer, AccessSpecifier Access) {
-  return addResourceMember("__handle", RC, IsROV, RawBuffer,
+BuiltinTypeDeclBuilder &
+BuiltinTypeDeclBuilder::addTextureHandle(ResourceClass RC, bool IsROV,
+                                         ResourceDimension RD,
+                                         AccessSpecifier Access) {
+  addHandleMember(RC, RD, IsROV, /*RawBuffer=*/false, Access);
+  return *this;
+}
+
+BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addSamplerHandle() {
+  addHandleMember(ResourceClass::Sampler, ResourceDimension::DimensionUnknown,
+                  /*IsROV=*/false, /*RawBuffer=*/false);
+  return *this;
+}
+
+BuiltinTypeDeclBuilder &
+BuiltinTypeDeclBuilder::addHandleMember(ResourceClass RC, ResourceDimension RD,
+                                        bool IsROV, bool RawBuffer,
+                                        AccessSpecifier Access) {
+  return addResourceMember("__handle", RC, RD, IsROV, RawBuffer,
                            /*IsCounter=*/false, Access);
 }
 
 BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addCounterHandleMember(
     ResourceClass RC, bool IsROV, bool RawBuffer, AccessSpecifier Access) {
-  return addResourceMember("__counter_handle", RC, IsROV, RawBuffer,
+  return addResourceMember("__counter_handle", RC,
+                           ResourceDimension::DimensionUnknown, IsROV,
+                           RawBuffer,
                            /*IsCounter=*/true, Access);
 }
 
 BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addResourceMember(
-    StringRef MemberName, ResourceClass RC, bool IsROV, bool RawBuffer,
-    bool IsCounter, AccessSpecifier Access) {
+    StringRef MemberName, ResourceClass RC, ResourceDimension RD, bool IsROV,
+    bool RawBuffer, bool IsCounter, AccessSpecifier Access) {
   assert(!Record->isCompleteDefinition() && "record is already complete");
 
   ASTContext &Ctx = SemaRef.getASTContext();
@@ -933,7 +924,10 @@ BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addResourceMember(
       HLSLResourceClassAttr::CreateImplicit(Ctx, RC),
       IsROV ? HLSLROVAttr::CreateImplicit(Ctx) : nullptr,
       RawBuffer ? HLSLRawBufferAttr::CreateImplicit(Ctx) : nullptr,
-      ElementTypeInfo
+      RD != ResourceDimension::DimensionUnknown
+          ? HLSLResourceDimensionAttr::CreateImplicit(Ctx, RD)
+          : nullptr,
+      ElementTypeInfo && RC != ResourceClass::Sampler
           ? HLSLContainedTypeAttr::CreateImplicit(Ctx, ElementTypeInfo)
           : nullptr};
   if (IsCounter)
@@ -1213,6 +1207,44 @@ BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addLoadMethods() {
   addLoadWithStatusFunction(Load, /*IsConst=*/false);
 
   return *this;
+}
+
+BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addSampleMethods() {
+  assert(!Record->isCompleteDefinition() && "record is already complete");
+
+  ASTContext &AST = Record->getASTContext();
+  QualType ReturnType = getFirstTemplateTypeParam();
+
+  // Look up SamplerState
+  IdentifierInfo &SamplerStateII = AST.Idents.get("SamplerState");
+  LookupResult Result(SemaRef, &SamplerStateII, SourceLocation(),
+                      Sema::LookupTagName);
+  SemaRef.LookupQualifiedName(Result, Record->getDeclContext());
+  assert(!Result.empty() && "SamplerState not found");
+  QualType SamplerStateType =
+      AST.getTypeDeclType(Result.getAsSingle<TypeDecl>());
+  SemaRef.RequireCompleteType(SourceLocation(), SamplerStateType,
+                              diag::err_tentative_def_incomplete_type);
+
+  // TODO: The location type depends on the texture dimension.
+  // For Texture2D it is float2.
+  QualType FloatTy = AST.FloatTy;
+  QualType Float2Ty = AST.getExtVectorType(FloatTy, 2);
+
+  auto *RT = SamplerStateType->getAsCXXRecordDecl();
+  assert(RT);
+  assert(!RT->field_empty());
+  FieldDecl *SamplerHandleField = *RT->field_begin();
+
+  using PH = BuiltinTypeMethodBuilder::PlaceHolder;
+  return BuiltinTypeMethodBuilder(*this, "Sample", ReturnType)
+      .addParam("Sampler", SamplerStateType)
+      .addParam("Location", Float2Ty)
+      .accessFieldOnResource(PH::_0, SamplerHandleField)
+      .callBuiltin("__builtin_hlsl_resource_sample", ReturnType, PH::Handle,
+                   PH::LastStmt, PH::_1)
+      .returnValue(PH::LastStmt)
+      .finalize();
 }
 
 FieldDecl *BuiltinTypeDeclBuilder::getResourceHandleField() const {

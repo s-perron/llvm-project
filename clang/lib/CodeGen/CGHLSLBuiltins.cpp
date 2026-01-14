@@ -440,6 +440,16 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
         RetTy, CGM.getHLSLRuntime().getCreateResourceGetPointerIntrinsic(),
         ArrayRef<Value *>{HandleOp, IndexOp});
   }
+  case Builtin::BI__builtin_hlsl_resource_sample: {
+    Value *HandleOp = EmitScalarExpr(E->getArg(0));
+    Value *SamplerOp = EmitScalarExpr(E->getArg(1));
+    Value *CoordOp = EmitScalarExpr(E->getArg(2));
+
+    llvm::Type *RetTy = ConvertType(E->getType());
+    return Builder.CreateIntrinsic(
+        RetTy, CGM.getHLSLRuntime().getSampleIntrinsic(),
+        ArrayRef<Value *>{HandleOp, SamplerOp, CoordOp});
+  }
   case Builtin::BI__builtin_hlsl_resource_load_with_status: {
     Value *HandleOp = EmitScalarExpr(E->getArg(0));
     Value *IndexOp = EmitScalarExpr(E->getArg(1));

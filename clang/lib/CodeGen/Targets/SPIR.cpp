@@ -874,7 +874,7 @@ llvm::Type *CommonSPIRTargetCodeGenInfo::getSPIRVImageTypeFromHLSLResource(
   case llvm::dxil::ResourceDimension::DimensionCube:
     IntParams[0] = 3;
     break;
-  case llvm::dxil::ResourceDimension::Invalid:
+  case llvm::dxil::ResourceDimension::DimensionUnknown:
   default:
     IntParams[0] = 5;
     break;

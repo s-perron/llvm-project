@@ -501,6 +501,31 @@ void HLSLExternalSemaSource::defineHLSLTypesWithForwardDeclarations() {
         .completeDefinition();
   });
 
+  Decl = BuiltinTypeDeclBuilder(*SemaPtr, HLSLNamespace, "SamplerState")
+             .finalizeForwardDeclaration();
+  onCompletion(Decl, [this](CXXRecordDecl *Decl) {
+    BuiltinTypeDeclBuilder(*SemaPtr, Decl)
+        .addSamplerHandle()
+        .addDefaultHandleConstructor()
+        .addCopyConstructor()
+        .addCopyAssignmentOperator()
+        .addStaticInitializationFunctions(false)
+        .completeDefinition();
+  });
+
+  Decl =
+      BuiltinTypeDeclBuilder(*SemaPtr, HLSLNamespace, "SamplerComparisonState")
+          .finalizeForwardDeclaration();
+  onCompletion(Decl, [this](CXXRecordDecl *Decl) {
+    BuiltinTypeDeclBuilder(*SemaPtr, Decl)
+        .addSamplerHandle()
+        .addDefaultHandleConstructor()
+        .addCopyConstructor()
+        .addCopyAssignmentOperator()
+        .addStaticInitializationFunctions(false)
+        .completeDefinition();
+  });
+
   Decl = BuiltinTypeDeclBuilder(*SemaPtr, HLSLNamespace, "Texture2D")
              .addSimpleTemplateParams({"element_type"}, TypedBufferConcept)
              .finalizeForwardDeclaration();
@@ -509,24 +534,10 @@ void HLSLExternalSemaSource::defineHLSLTypesWithForwardDeclarations() {
         .addTextureHandle(ResourceClass::SRV, /*IsROV=*/false,
                           ResourceDimension::Dimension2D)
         .addDefaultHandleConstructor()
-        .completeDefinition();
-  });
-
-  Decl = BuiltinTypeDeclBuilder(*SemaPtr, HLSLNamespace, "SamplerState")
-             .finalizeForwardDeclaration();
-  onCompletion(Decl, [this](CXXRecordDecl *Decl) {
-    BuiltinTypeDeclBuilder(*SemaPtr, Decl)
-        .addSamplerHandle(ResourceClass::Sampler)
-        .addDefaultHandleConstructor()
-        .completeDefinition();
-  });
-
-  Decl = BuiltinTypeDeclBuilder(*SemaPtr, HLSLNamespace, "SamplerComparisonState")
-             .finalizeForwardDeclaration();
-  onCompletion(Decl, [this](CXXRecordDecl *Decl) {
-    BuiltinTypeDeclBuilder(*SemaPtr, Decl)
-        .addSamplerHandle(ResourceClass::Sampler)
-        .addDefaultHandleConstructor()
+        .addCopyConstructor()
+        .addCopyAssignmentOperator()
+        .addStaticInitializationFunctions(false)
+        .addSampleMethods()
         .completeDefinition();
   });
 }
