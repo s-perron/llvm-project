@@ -17,8 +17,10 @@
 #include "clang/AST/Type.h"
 #include "clang/Sema/Sema.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/DXILABI.h"
 
 using llvm::hlsl::ResourceClass;
+using llvm::dxil::ResourceDimension;
 
 namespace clang {
 
@@ -75,6 +77,12 @@ public:
   addBufferHandles(ResourceClass RC, bool IsROV, bool RawBuffer,
                    bool HasCounter,
                    AccessSpecifier Access = AccessSpecifier::AS_private);
+  BuiltinTypeDeclBuilder &
+  addTextureHandle(ResourceClass RC, bool IsROV, ResourceDimension RD,
+                   AccessSpecifier Access = AccessSpecifier::AS_private);
+  BuiltinTypeDeclBuilder &
+  addSamplerHandle(ResourceClass RC,
+                   AccessSpecifier Access = AccessSpecifier::AS_private);
   BuiltinTypeDeclBuilder &addArraySubscriptOperators();
 
   // Builtin types constructors
@@ -87,6 +95,7 @@ public:
 
   // Builtin types methods
   BuiltinTypeDeclBuilder &addLoadMethods();
+  BuiltinTypeDeclBuilder &addSampleMethods();
   BuiltinTypeDeclBuilder &addIncrementCounterMethod();
   BuiltinTypeDeclBuilder &addDecrementCounterMethod();
   BuiltinTypeDeclBuilder &addHandleAccessFunction(DeclarationName &Name,
@@ -104,14 +113,16 @@ private:
   BuiltinTypeDeclBuilder &addCreateFromBindingWithImplicitCounter();
   BuiltinTypeDeclBuilder &addCreateFromImplicitBindingWithImplicitCounter();
   BuiltinTypeDeclBuilder &addResourceMember(StringRef MemberName,
-                                            ResourceClass RC, bool IsROV,
-                                            bool RawBuffer, bool IsCounter,
+                                            ResourceClass RC, ResourceDimension RD,
+                                            bool IsROV, bool RawBuffer,
+                                            bool IsCounter,
                                             AccessSpecifier Access);
   BuiltinTypeDeclBuilder &
-  addHandleMember(ResourceClass RC, bool IsROV, bool RawBuffer,
+  addHandleMember(ResourceClass RC, ResourceDimension RD, bool IsROV, bool RawBuffer,
                   AccessSpecifier Access = AccessSpecifier::AS_private);
   BuiltinTypeDeclBuilder &
-  addCounterHandleMember(ResourceClass RC, bool IsROV, bool RawBuffer,
+  addCounterHandleMember(ResourceClass RC, ResourceDimension RD, bool IsROV,
+                         bool RawBuffer,
                          AccessSpecifier Access = AccessSpecifier::AS_private);
   FieldDecl *getResourceHandleField() const;
   FieldDecl *getResourceCounterHandleField() const;
