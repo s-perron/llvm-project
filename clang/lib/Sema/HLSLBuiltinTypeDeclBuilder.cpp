@@ -206,6 +206,11 @@ public:
   template <typename TLHS, typename TRHS>
   BuiltinTypeMethodBuilder &assign(TLHS LHS, TRHS RHS);
   template <typename T> BuiltinTypeMethodBuilder &dereference(T Ptr);
+
+  template <typename T>
+  BuiltinTypeMethodBuilder &accessFieldOnResource(T ResourceRecord,
+                                                  FieldDecl *Field);
+
   template <typename T>
   BuiltinTypeMethodBuilder &accessHandleFieldOnResource(T ResourceRecord);
   template <typename ResourceT, typename ValueT>
@@ -628,6 +633,23 @@ BuiltinTypeMethodBuilder &BuiltinTypeMethodBuilder::dereference(T Ptr) {
                             VK_PRValue, OK_Ordinary, SourceLocation(),
                             /*CanOverflow=*/false, FPOptionsOverride());
   StmtsList.push_back(Deref);
+  return *this;
+}
+
+template <typename T>
+BuiltinTypeMethodBuilder &
+BuiltinTypeMethodBuilder::accessFieldOnResource(T ResourceRecord,
+                                                FieldDecl *Field) {
+  ensureCompleteDecl();
+
+  Expr *ResourceExpr = convertPlaceholder(ResourceRecord);
+
+  ASTContext &AST = DeclBuilder.SemaRef.getASTContext();
+
+  MemberExpr *FieldExpr =
+      MemberExpr::CreateImplicit(AST, ResourceExpr, false, Field,
+                                 Field->getType(), VK_LValue, OK_Ordinary);
+  StmtsList.push_back(FieldExpr);
   return *this;
 }
 
