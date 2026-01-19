@@ -177,6 +177,8 @@ private:
   Expr *convertPlaceholder(LocalVar &Var);
   Expr *convertPlaceholder(Expr *E) { return E; }
 
+  FieldDecl *lookupField(Expr *ResourceExpr, StringRef FieldName);
+
 public:
   friend BuiltinTypeDeclBuilder;
 
@@ -241,7 +243,7 @@ private:
   template <typename ResourceT, typename ValueT>
   BuiltinTypeMethodBuilder &setFieldOnResource(ResourceT ResourceRecord,
                                                ValueT HandleValue,
-                                               FieldDecl *HandleField);
+                                               StringRef FieldName);
 };
 
 TemplateParameterListBuilder::~TemplateParameterListBuilder() {
@@ -425,6 +427,18 @@ Expr *BuiltinTypeMethodBuilder::convertPlaceholder(LocalVar &Var) {
       VD->getASTContext(), NestedNameSpecifierLoc(), SourceLocation(), VD,
       false, DeclarationNameInfo(VD->getDeclName(), SourceLocation()),
       VD->getType(), VK_LValue);
+}
+
+FieldDecl *BuiltinTypeMethodBuilder::lookupField(Expr *ResourceExpr,
+                                                 StringRef FieldName) {
+  CXXRecordDecl *RD = ResourceExpr->getType()->getAsCXXRecordDecl();
+  DeclarationName Name =
+      &DeclBuilder.SemaRef.getASTContext().Idents.get(FieldName);
+  LookupResult R(DeclBuilder.SemaRef, Name, SourceLocation(),
+                 Sema::LookupMemberName);
+  DeclBuilder.SemaRef.LookupQualifiedName(R, RD);
+  assert(!R.empty() && "Field not found");
+  return dyn_cast<FieldDecl>(R.getFoundDecl());
 }
 
 BuiltinTypeMethodBuilder::BuiltinTypeMethodBuilder(BuiltinTypeDeclBuilder &DB,
@@ -663,9 +677,12 @@ BuiltinTypeMethodBuilder::accessHandleFieldOnResource(T ResourceRecord) {
          "Getting the field from the wrong resource type.");
 
   ASTContext &AST = DeclBuilder.SemaRef.getASTContext();
-  FieldDecl *HandleField = DeclBuilder.getResourceHandleField();
+  FieldDecl *HandleField = lookupField(ResourceExpr, "__handle");
+  QualType FieldTy = HandleField->getType();
+  if (ResourceExpr->getType().isConstQualified())
+    FieldTy.addConst();
   MemberExpr *HandleExpr = MemberExpr::CreateImplicit(
-      AST, ResourceExpr, false, HandleField, HandleField->getType(), VK_LValue,
+      AST, ResourceExpr, false, HandleField, FieldTy, VK_LValue,
       OK_Ordinary);
   StmtsList.push_back(HandleExpr);
   return *this;
@@ -675,21 +692,19 @@ template <typename ResourceT, typename ValueT>
 BuiltinTypeMethodBuilder &
 BuiltinTypeMethodBuilder::setHandleFieldOnResource(ResourceT ResourceRecord,
                                                    ValueT HandleValue) {
-  return setFieldOnResource(ResourceRecord, HandleValue,
-                            DeclBuilder.getResourceHandleField());
+  return setFieldOnResource(ResourceRecord, HandleValue, "__handle");
 }
 
 template <typename ResourceT, typename ValueT>
 BuiltinTypeMethodBuilder &
 BuiltinTypeMethodBuilder::setCounterHandleFieldOnResource(
     ResourceT ResourceRecord, ValueT HandleValue) {
-  return setFieldOnResource(ResourceRecord, HandleValue,
-                            DeclBuilder.getResourceCounterHandleField());
+  return setFieldOnResource(ResourceRecord, HandleValue, "__counter_handle");
 }
 
 template <typename ResourceT, typename ValueT>
 BuiltinTypeMethodBuilder &BuiltinTypeMethodBuilder::setFieldOnResource(
-    ResourceT ResourceRecord, ValueT HandleValue, FieldDecl *HandleField) {
+    ResourceT ResourceRecord, ValueT HandleValue, StringRef FieldName) {
   ensureCompleteDecl();
 
   Expr *ResourceExpr = convertPlaceholder(ResourceRecord);
@@ -699,9 +714,13 @@ BuiltinTypeMethodBuilder &BuiltinTypeMethodBuilder::setFieldOnResource(
 
   Expr *HandleValueExpr = convertPlaceholder(HandleValue);
 
+  FieldDecl *HandleField = lookupField(ResourceExpr, FieldName);
   ASTContext &AST = DeclBuilder.SemaRef.getASTContext();
+  QualType FieldTy = HandleField->getType();
+  if (ResourceExpr->getType().isConstQualified())
+    FieldTy.addConst();
   MemberExpr *HandleMemberExpr = MemberExpr::CreateImplicit(
-      AST, ResourceExpr, false, HandleField, HandleField->getType(), VK_LValue,
+      AST, ResourceExpr, false, HandleField, FieldTy, VK_LValue,
       OK_Ordinary);
   Stmt *AssignStmt = BinaryOperator::Create(
       DeclBuilder.SemaRef.getASTContext(), HandleMemberExpr, HandleValueExpr,
@@ -721,9 +740,12 @@ BuiltinTypeMethodBuilder::accessCounterHandleFieldOnResource(T ResourceRecord) {
          "Getting the field from the wrong resource type.");
 
   ASTContext &AST = DeclBuilder.SemaRef.getASTContext();
-  FieldDecl *HandleField = DeclBuilder.getResourceCounterHandleField();
+  FieldDecl *HandleField = lookupField(ResourceExpr, "__counter_handle");
+  QualType FieldTy = HandleField->getType();
+  if (ResourceExpr->getType().isConstQualified())
+    FieldTy.addConst();
   MemberExpr *HandleExpr = MemberExpr::CreateImplicit(
-      AST, ResourceExpr, false, HandleField, HandleField->getType(), VK_LValue,
+      AST, ResourceExpr, false, HandleField, FieldTy, VK_LValue,
       OK_Ordinary);
   StmtsList.push_back(HandleExpr);
   return *this;
