@@ -432,6 +432,12 @@ Expr *BuiltinTypeMethodBuilder::convertPlaceholder(LocalVar &Var) {
 FieldDecl *BuiltinTypeMethodBuilder::lookupField(Expr *ResourceExpr,
                                                  StringRef FieldName) {
   CXXRecordDecl *RD = ResourceExpr->getType()->getAsCXXRecordDecl();
+  if (RD == DeclBuilder.Record) {
+    if (FieldName == "__handle")
+      return DeclBuilder.getResourceHandleField();
+    if (FieldName == "__counter_handle")
+      return DeclBuilder.getResourceCounterHandleField();
+  }
   DeclarationName Name =
       &DeclBuilder.SemaRef.getASTContext().Idents.get(FieldName);
   LookupResult R(DeclBuilder.SemaRef, Name, SourceLocation(),
