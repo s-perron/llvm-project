@@ -502,7 +502,7 @@ void BuiltinTypeMethodBuilder::createDecl() {
   else
     Method = CXXMethodDecl::Create(
         AST, DeclBuilder.Record, SourceLocation(), NameInfo, FuncTy, TSInfo, SC,
-        false, false, ConstexprSpecKind::Unspecified, SourceLocation());
+        false, true, ConstexprSpecKind::Unspecified, SourceLocation());
 
   // Create params & set them to the method/constructor and function prototype.
   SmallVector<ParmVarDecl *> ParmDecls;
@@ -1231,18 +1231,34 @@ BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addSampleMethods() {
   QualType FloatTy = AST.FloatTy;
   QualType Float2Ty = AST.getExtVectorType(FloatTy, 2);
 
+  QualType IntTy = AST.IntTy;
+  QualType Int2Ty = AST.getExtVectorType(IntTy, 2);
+
   auto *RT = SamplerStateType->getAsCXXRecordDecl();
   assert(RT);
   assert(!RT->field_empty());
   FieldDecl *SamplerHandleField = *RT->field_begin();
 
   using PH = BuiltinTypeMethodBuilder::PlaceHolder;
-  return BuiltinTypeMethodBuilder(*this, "Sample", ReturnType)
+
+  // T Sample(SamplerState s, float2 location)
+  BuiltinTypeMethodBuilder(*this, "Sample", ReturnType)
       .addParam("Sampler", SamplerStateType)
       .addParam("Location", Float2Ty)
       .accessFieldOnResource(PH::_0, SamplerHandleField)
       .callBuiltin("__builtin_hlsl_resource_sample", ReturnType, PH::Handle,
                    PH::LastStmt, PH::_1)
+      .returnValue(PH::LastStmt)
+      .finalize();
+
+  // T Sample(SamplerState s, float2 location, int2 offset)
+  return BuiltinTypeMethodBuilder(*this, "Sample", ReturnType)
+      .addParam("Sampler", SamplerStateType)
+      .addParam("Location", Float2Ty)
+      .addParam("Offset", Int2Ty)
+      .accessFieldOnResource(PH::_0, SamplerHandleField)
+      .callBuiltin("__builtin_hlsl_resource_sample", ReturnType, PH::Handle,
+                   PH::LastStmt, PH::_1, PH::_2)
       .returnValue(PH::LastStmt)
       .finalize();
 }

@@ -445,10 +445,27 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
     Value *SamplerOp = EmitScalarExpr(E->getArg(1));
     Value *CoordOp = EmitScalarExpr(E->getArg(2));
 
+    SmallVector<Value *, 4> Args;
+    Args.push_back(HandleOp);
+    Args.push_back(SamplerOp);
+    Args.push_back(CoordOp);
+    if (E->getNumArgs() > 3) {
+      Args.push_back(EmitScalarExpr(E->getArg(3)));
+    } else {
+      // Default offset is 0.
+      // We need to know the type of the offset. It should be a vector of i32
+      // with the same number of elements as the coordinate, or scalar i32.
+      llvm::Type *CoordTy = CoordOp->getType();
+      llvm::Type *Int32Ty = Builder.getInt32Ty();
+      llvm::Type *OffsetTy = Int32Ty;
+      if (auto *VT = dyn_cast<llvm::FixedVectorType>(CoordTy))
+        OffsetTy = llvm::FixedVectorType::get(Int32Ty, VT->getNumElements());
+      Args.push_back(llvm::Constant::getNullValue(OffsetTy));
+    }
+
     llvm::Type *RetTy = ConvertType(E->getType());
     return Builder.CreateIntrinsic(
-        RetTy, CGM.getHLSLRuntime().getSampleIntrinsic(),
-        ArrayRef<Value *>{HandleOp, SamplerOp, CoordOp});
+        RetTy, CGM.getHLSLRuntime().getSampleIntrinsic(), Args);
   }
   case Builtin::BI__builtin_hlsl_resource_load_with_status: {
     Value *HandleOp = EmitScalarExpr(E->getArg(0));

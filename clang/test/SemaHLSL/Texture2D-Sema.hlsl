@@ -5,11 +5,11 @@ SamplerState s;
 
 void main(float2 loc) {
   t.Sample(s, loc);
+  t.Sample(s, loc, int2(1, 2));
   
-  // expected-error@+1 {{too few arguments to function call, expected 2, have 1}}
+  // expected-error@+1 {{no matching member function for call to 'Sample'}}
   t.Sample(loc);
 
-  // expected-error@+1 {{too many arguments to function call, expected 2, have 3}}
-  t.Sample(s, loc, 1.0);
+  // expected-error@+1 {{no matching member function for call to 'Sample'}}
+  t.Sample(s, loc, int2(1, 2), 1.0);
 }
-

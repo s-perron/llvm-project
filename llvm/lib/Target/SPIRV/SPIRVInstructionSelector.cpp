@@ -321,6 +321,8 @@ private:
 
   bool selectReadImageIntrinsic(Register &ResVReg, const SPIRVType *ResType,
                                 MachineInstr &I) const;
+  bool selectSampleIntrinsic(Register &ResVReg, const SPIRVType *ResType,
+                             MachineInstr &I) const;
   bool selectImageWriteIntrinsic(MachineInstr &I) const;
   bool selectResourceGetPointer(Register &ResVReg, const SPIRVType *ResType,
                                 MachineInstr &I) const;
@@ -565,6 +567,7 @@ static bool intrinsicHasSideEffects(Intrinsic::ID ID) {
   case Intrinsic::spv_resource_handlefrombinding:
   case Intrinsic::spv_resource_handlefromimplicitbinding:
   case Intrinsic::spv_resource_nonuniformindex:
+  case Intrinsic::spv_resource_sample:
   case Intrinsic::spv_rsqrt:
   case Intrinsic::spv_saturate:
   case Intrinsic::spv_sdot:
@@ -3860,6 +3863,9 @@ bool SPIRVInstructionSelector::selectIntrinsic(Register ResVReg,
   case Intrinsic::spv_resource_load_typedbuffer: {
     return selectReadImageIntrinsic(ResVReg, ResType, I);
   }
+  case Intrinsic::spv_resource_sample: {
+    return selectSampleIntrinsic(ResVReg, ResType, I);
+  }
   case Intrinsic::spv_resource_getpointer: {
     return selectResourceGetPointer(ResVReg, ResType, I);
   }
@@ -4058,6 +4064,100 @@ bool SPIRVInstructionSelector::selectReadImageIntrinsic(
 
   return generateImageReadOrFetch(ResVReg, ResType, NewImageReg, IdxReg, Loc,
                                   Pos);
+}
+
+bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
+                                                     const SPIRVType *ResType,
+                                                     MachineInstr &I) const {
+  Register ImageReg = I.getOperand(2).getReg();
+  Register SamplerReg = I.getOperand(3).getReg();
+  Register CoordinateReg = I.getOperand(4).getReg();
+  std::optional<Register> OffsetReg;
+  if (I.getNumOperands() > 5)
+    OffsetReg = I.getOperand(5).getReg();
+
+  DebugLoc Loc = I.getDebugLoc();
+
+  auto *ImageDef = cast<GIntrinsic>(getVRegDef(*MRI, ImageReg));
+  Register NewImageReg = MRI->createVirtualRegister(MRI->getRegClass(ImageReg));
+  if (!loadHandleBeforePosition(NewImageReg, GR.getSPIRVTypeForVReg(ImageReg),
+                                *ImageDef, I)) {
+    return false;
+  }
+
+  auto *SamplerDef = cast<GIntrinsic>(getVRegDef(*MRI, SamplerReg));
+  Register NewSamplerReg =
+      MRI->createVirtualRegister(MRI->getRegClass(SamplerReg));
+  if (!loadHandleBeforePosition(
+          NewSamplerReg, GR.getSPIRVTypeForVReg(SamplerReg), *SamplerDef, I)) {
+    return false;
+  }
+
+  MachineIRBuilder MIRBuilder(I);
+  SPIRVType *SampledImageType = GR.getOrCreateOpTypeSampledImage(
+      GR.getSPIRVTypeForVReg(ImageReg), MIRBuilder);
+
+  Register SampledImageReg =
+      MRI->createVirtualRegister(GR.getRegClass(SampledImageType));
+  bool Succeed = BuildMI(*I.getParent(), I, Loc, TII.get(SPIRV::OpSampledImage))
+                     .addDef(SampledImageReg)
+                     .addUse(GR.getSPIRVTypeID(SampledImageType))
+                     .addUse(NewImageReg)
+                     .addUse(NewSamplerReg)
+                     .constrainAllUses(TII, TRI, RBI);
+  if (!Succeed)
+    return false;
+
+  auto MIB =
+      BuildMI(*I.getParent(), I, Loc, TII.get(SPIRV::OpImageSampleImplicitLod))
+          .addDef(ResVReg)
+          .addUse(GR.getSPIRVTypeID(ResType))
+          .addUse(SampledImageReg)
+          .addUse(CoordinateReg);
+
+  if (OffsetReg) {
+    // Check if the offset is a constant zero.
+    MachineInstr *OffsetDef = MRI->getVRegDef(*OffsetReg);
+    bool IsZero = false;
+    if (OffsetDef) {
+      if (OffsetDef->getOpcode() == SPIRV::OpConstantNull) {
+        IsZero = true;
+      } else if (OffsetDef->getOpcode() == TargetOpcode::G_CONSTANT) {
+        if (getIConstVal(*OffsetReg, MRI) == 0)
+          IsZero = true;
+      } else if (OffsetDef->getOpcode() == TargetOpcode::G_BUILD_VECTOR) {
+        // Check if all elements are zero.
+        IsZero = true;
+        for (unsigned i = 1; i < OffsetDef->getNumOperands(); ++i) {
+          Register EltReg = OffsetDef->getOperand(i).getReg();
+          if (getIConstVal(EltReg, MRI) != 0) {
+            IsZero = false;
+            break;
+          }
+        }
+      } else if (OffsetDef->getOpcode() ==
+                     TargetOpcode::G_INTRINSIC_W_SIDE_EFFECTS &&
+                 cast<GIntrinsic>(OffsetDef)->getIntrinsicID() ==
+                     Intrinsic::spv_const_composite) {
+        // Check if all elements are zero.
+        IsZero = true;
+        for (unsigned i = 2; i < OffsetDef->getNumOperands(); ++i) {
+          Register EltReg = OffsetDef->getOperand(i).getReg();
+          if (getIConstVal(EltReg, MRI) != 0) {
+            IsZero = false;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!IsZero) {
+      MIB.addImm(0x8); // ConstOffset
+      MIB.addUse(*OffsetReg);
+    }
+  }
+
+  return MIB.constrainAllUses(TII, TRI, RBI);
 }
 
 bool SPIRVInstructionSelector::generateImageReadOrFetch(
