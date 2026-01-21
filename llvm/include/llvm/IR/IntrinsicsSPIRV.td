@@ -185,10 +185,11 @@ def int_spv_rsqrt : DefaultAttrsIntrinsic<[LLVMMatchType<0>], [llvm_anyfloat_ty]
       : DefaultAttrsIntrinsic<
             [llvm_any_ty], [llvm_any_ty, llvm_any_ty, llvm_any_ty, llvm_any_ty],
             [IntrReadMem]>;
+
   def int_spv_resource_sample_clamp
       : DefaultAttrsIntrinsic<[llvm_any_ty],
                               [llvm_any_ty, llvm_any_ty, llvm_any_ty,
-                               llvm_any_ty, llvm_any_ty],
+                               llvm_any_ty, llvm_float_ty],
                               [IntrReadMem]>;
 
   def int_spv_resource_getpointer

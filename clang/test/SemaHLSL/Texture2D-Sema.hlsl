@@ -11,4 +11,13 @@ void main(float2 loc) {
   t.Sample(loc);
 
   t.Sample(s, loc, int2(1, 2), 1.0);
+
+  // expected-error@+1 {{no matching member function for call to 'Sample'}}
+  t.Sample(s, loc, int2(1, 2), 1.0, 1.0);
+
+  // expected-error@+1 {{no matching member function for call to 'Sample'}}
+  t.Sample(s, loc, s);
+
+  // expected-error@+1 {{no matching member function for call to 'Sample'}}
+  t.Sample(s, loc, int2(1, 2), s);
 }

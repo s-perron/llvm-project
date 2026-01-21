@@ -18,13 +18,22 @@ float4 main(float2 loc : LOC) : SV_Target {
   return t.Sample(s, loc);
 }
 
-// CHECK: define linkonce_odr hidden noundef nofpclass(nan inf) <4 x float> @_ZN4hlsl9Texture2DIDv4_fE6SampleENS_12SamplerStateEDv2_f(ptr {{.*}} %[[THIS:.*]], ptr {{.*}} byval(%"class.hlsl::SamplerState") {{.*}} %[[SAMPLER:.*]], <2 x float> {{.*}} %[[COORD:.*]])
-// CHECK: %[[HANDLE:.*]] = load target
-// CHECK: %[[SAMPLER_H:.*]] = load target
-// CHECK: %[[COORD_VAL:.*]] = load <2 x float>, ptr %{{.*}}
-// DXIL: %[[RES:.*]] = call {{.*}} <4 x float> @llvm.dx.resource.sample.v4f32.tdx.Texture_v4f32_0_0_0_2t.tdx.Sampler_0t.v2f32.v2i32(target("dx.Texture", <4 x float>, 0, 0, 0, 2) %[[HANDLE]], target("dx.Sampler", 0) %[[SAMPLER_H]], <2 x float> %[[COORD_VAL]], <2 x i32> zeroinitializer)
-// SPIRV: %[[RES:.*]] = call {{.*}} <4 x float> @llvm.spv.resource.sample.v4f32.tspirv.Image_f32_1_2_0_0_1_0t.tspirv.Samplert.v2f32.v2i32(target("spirv.Image", float, 1, 2, 0, 0, 1, 0) %[[HANDLE]], target("spirv.Sampler") %[[SAMPLER_H]], <2 x float> %[[COORD_VAL]], <2 x i32> zeroinitializer)
-// CHECK: ret <4 x float> %[[RES]]
+// CHECK: define hidden {{.*}} <4 x float> @_Z11test_offsetDv2_f(<2 x float> noundef nofpclass(nan inf) %[[LOC:.*]])
+// CHECK: %[[CALL:.*]] = call reassoc nnan ninf nsz arcp afn noundef nofpclass(nan inf) <4 x float> @_ZN4hlsl9Texture2DIDv4_fE6SampleENS_12SamplerStateEDv2_fDv2_i(ptr {{.*}} @_ZL1t, ptr {{.*}} byval(%"class.hlsl::SamplerState") {{.*}}, <2 x float> {{.*}} %{{.*}}, <2 x i32> {{.*}} <i32 1, i32 2>)
+// CHECK: ret <4 x float> %[[CALL]]
+
+float4 test_offset(float2 loc : LOC) : SV_Target {
+  return t.Sample(s, loc, int2(1, 2));
+}
+
+// CHECK: define linkonce_odr hidden noundef nofpclass(nan inf) <4 x float> @_ZN4hlsl9Texture2DIDv4_fE6SampleENS_12SamplerStateEDv2_fDv2_i(ptr {{.*}} %[[THIS:.*]], ptr {{.*}} byval(%"class.hlsl::SamplerState") {{.*}} %[[SAMPLER:.*]], <2 x float> {{.*}} %[[COORD:.*]], <2 x i32> {{.*}} %[[OFFSET:.*]])
+// CHECK: %[[HANDLE_3:.*]] = load target
+// CHECK: %[[SAMPLER_H_3:.*]] = load target
+// CHECK: %[[COORD_VAL_3:.*]] = load <2 x float>, ptr %{{.*}}
+// CHECK: %[[OFFSET_VAL_3:.*]] = load <2 x i32>, ptr %{{.*}}
+// DXIL: %[[RES_3:.*]] = call {{.*}} <4 x float> @llvm.dx.resource.sample.v4f32.tdx.Texture_v4f32_0_0_0_2t.tdx.Sampler_0t.v2f32.v2i32(target("dx.Texture", <4 x float>, 0, 0, 0, 2) %[[HANDLE_3]], target("dx.Sampler", 0) %[[SAMPLER_H_3]], <2 x float> %[[COORD_VAL_3]], <2 x i32> %[[OFFSET_VAL_3]])
+// SPIRV: %[[RES_3:.*]] = call {{.*}} <4 x float> @llvm.spv.resource.sample.v4f32.tspirv.Image_f32_1_2_0_0_1_0t.tspirv.Samplert.v2f32.v2i32(target("spirv.Image", float, 1, 2, 0, 0, 1, 0) %[[HANDLE_3]], target("spirv.Sampler") %[[SAMPLER_H_3]], <2 x float> %[[COORD_VAL_3]], <2 x i32> %[[OFFSET_VAL_3]])
+// CHECK: ret <4 x float> %[[RES_3]]
 
 // CHECK: define hidden {{.*}} <4 x float> @_Z10test_clampDv2_f(<2 x float> noundef nofpclass(nan inf) %[[LOC:.*]])
 // CHECK: %[[CALL:.*]] = call reassoc nnan ninf nsz arcp afn noundef nofpclass(nan inf) <4 x float> @_ZN4hlsl9Texture2DIDv4_fE6SampleENS_12SamplerStateEDv2_fDv2_if(ptr {{.*}} @_ZL1t, ptr {{.*}} byval(%"class.hlsl::SamplerState") {{.*}}, <2 x float> {{.*}}, <2 x i32> {{.*}} <i32 1, i32 2>, float {{.*}} 1.000000e+00)
@@ -41,6 +50,6 @@ float4 test_clamp(float2 loc : LOC) : SV_Target {
 // CHECK: %[[OFFSET_VAL_4:.*]] = load <2 x i32>, ptr %{{.*}}
 // CHECK: %[[CLAMP_VAL_4:.*]] = load float, ptr %{{.*}}
 // CHECK: %[[CLAMP_CAST:.*]] = fptrunc {{.*}} double {{.*}} to float
-// DXIL: %[[RES_4:.*]] = call {{.*}} <4 x float> @llvm.dx.resource.sample.clamp.v4f32.tdx.Texture_v4f32_0_0_0_2t.tdx.Sampler_0t.v2f32.v2i32.f32(target("dx.Texture", <4 x float>, 0, 0, 0, 2) %[[HANDLE_4]], target("dx.Sampler", 0) %[[SAMPLER_H_4]], <2 x float> %[[COORD_VAL_4]], <2 x i32> %[[OFFSET_VAL_4]], float %[[CLAMP_CAST]])
-// SPIRV: %[[RES_4:.*]] = call {{.*}} <4 x float> @llvm.spv.resource.sample.clamp.v4f32.tspirv.Image_f32_1_2_0_0_1_0t.tspirv.Samplert.v2f32.v2i32.f32(target("spirv.Image", float, 1, 2, 0, 0, 1, 0) %[[HANDLE_4]], target("spirv.Sampler") %[[SAMPLER_H_4]], <2 x float> %[[COORD_VAL_4]], <2 x i32> %[[OFFSET_VAL_4]], float %[[CLAMP_CAST]])
+// DXIL: %[[RES_4:.*]] = call {{.*}} <4 x float> @llvm.dx.resource.sample.clamp.v4f32.tdx.Texture_v4f32_0_0_0_2t.tdx.Sampler_0t.v2f32.v2i32(target("dx.Texture", <4 x float>, 0, 0, 0, 2) %[[HANDLE_4]], target("dx.Sampler", 0) %[[SAMPLER_H_4]], <2 x float> %[[COORD_VAL_4]], <2 x i32> %[[OFFSET_VAL_4]], float %[[CLAMP_CAST]])
+// SPIRV: %[[RES_4:.*]] = call {{.*}} <4 x float> @llvm.spv.resource.sample.clamp.v4f32.tspirv.Image_f32_1_2_0_0_1_0t.tspirv.Samplert.v2f32.v2i32(target("spirv.Image", float, 1, 2, 0, 0, 1, 0) %[[HANDLE_4]], target("spirv.Sampler") %[[SAMPLER_H_4]], <2 x float> %[[COORD_VAL_4]], <2 x i32> %[[OFFSET_VAL_4]], float %[[CLAMP_CAST]])
 // CHECK: ret <4 x float> %[[RES_4]]

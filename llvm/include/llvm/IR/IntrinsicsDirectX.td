@@ -88,7 +88,7 @@ def int_dx_resource_sample
 def int_dx_resource_sample_clamp
     : DefaultAttrsIntrinsic<[llvm_any_ty],
                             [llvm_any_ty, llvm_any_ty, llvm_any_ty, llvm_any_ty,
-                             llvm_any_ty],
+                             llvm_float_ty],
                             [IntrReadMem]>;
 
 // Cast between target extension handle types and dxil-style opaque handles
