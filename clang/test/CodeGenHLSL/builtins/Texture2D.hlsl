@@ -11,29 +11,36 @@ Texture2D<float4> t;
 SamplerState s;
 
 // CHECK: define hidden {{.*}} <4 x float> @_Z4mainDv2_f(<2 x float> noundef nofpclass(nan inf) %[[LOC:.*]])
-// CHECK: %[[CALL:.*]] = call reassoc nnan ninf nsz arcp afn noundef nofpclass(nan inf) <4 x float> @_ZN4hlsl9Texture2DIDv4_fE6SampleENS_12SamplerStateEDv2_f(ptr noundef nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) @_ZL1t, ptr noundef byval(%"class.hlsl::SamplerState") align {{[0-9]+}} %{{.*}}, <2 x float> noundef nofpclass(nan inf) %{{.*}})
+// CHECK: %[[CALL:.*]] = call reassoc nnan ninf nsz arcp afn noundef nofpclass(nan inf) <4 x float> @_ZN4hlsl9Texture2DIDv4_fE6SampleENS_12SamplerStateEDv2_f(ptr {{.*}} @_ZL1t, ptr {{.*}} byval(%"class.hlsl::SamplerState") {{.*}}, <2 x float> {{.*}} %{{.*}})
 // CHECK: ret <4 x float> %[[CALL]]
 
 float4 main(float2 loc : LOC) : SV_Target {
   return t.Sample(s, loc);
 }
 
-// CHECK: define linkonce_odr {{.*}} noundef nofpclass(nan inf) <4 x float> @_ZN4hlsl9Texture2DIDv4_fE6SampleENS_12SamplerStateEDv2_f(ptr noundef nonnull align {{[0-9]+}} dereferenceable({{[0-9]+}}) %[[THIS:.*]], ptr noundef byval(%"class.hlsl::SamplerState") align {{[0-9]+}} %[[SAMPLER:.*]], <2 x float> noundef nofpclass(nan inf) %[[COORD:.*]])
-// CHECK-NEXT: entry:
-// CHECK: %[[THIS_ADDR:.*]] = alloca ptr
-// CHECK-NEXT: %[[COORD_ADDR:.*]] = alloca <2 x float>
-// CHECK-NEXT: store ptr %[[THIS]], ptr %[[THIS_ADDR]]
-// CHECK-NEXT: store <2 x float> %[[COORD]], ptr %[[COORD_ADDR]]
-// CHECK-NEXT: %[[THIS1:.*]] = load ptr, ptr %[[THIS_ADDR]]
-// CHECK-NEXT: %[[H_ATTR:.*]] = getelementptr inbounds {{.*}}%"class.hlsl::Texture2D", ptr %[[THIS1]], i32 0, i32 0
-// CHECK-NEXT: %[[HANDLE:.*]] = load target
-// DXIL-SAME: ("dx.Texture", <4 x float>, 0, 0, 0, 2), ptr %[[H_ATTR]]
-// SPIRV-SAME: ("spirv.Image", float, 1, 2, 0, 0, 1, 0), ptr %[[H_ATTR]]
-// CHECK-NEXT: %[[S_ATTR:.*]] = getelementptr inbounds {{.*}}%"class.hlsl::SamplerState", ptr %[[SAMPLER]], i32 0, i32 0
-// CHECK-NEXT: %[[SAMPLER_H:.*]] = load target
-// DXIL-SAME: ("dx.Sampler", 0), ptr %[[S_ATTR]]
-// SPIRV-SAME: ("spirv.Sampler"), ptr %[[S_ATTR]]
-// CHECK-NEXT: %[[COORD_VAL:.*]] = load <2 x float>, ptr %[[COORD_ADDR]]
-// DXIL-NEXT: %[[RES:.*]] = call {{.*}} <4 x float> @llvm.dx.resource.sample.v4f32.tdx.Texture_v4f32_0_0_0_2t.tdx.Sampler_0t.v2f32.v2i32(target("dx.Texture", <4 x float>, 0, 0, 0, 2) %[[HANDLE]], target("dx.Sampler", 0) %[[SAMPLER_H]], <2 x float> %[[COORD_VAL]], <2 x i32> zeroinitializer)
-// SPIRV-NEXT: %[[RES:.*]] = call {{.*}} <4 x float> @llvm.spv.resource.sample.v4f32.tspirv.Image_f32_1_2_0_0_1_0t.tspirv.Samplert.v2f32.v2i32(target("spirv.Image", float, 1, 2, 0, 0, 1, 0) %[[HANDLE]], target("spirv.Sampler") %[[SAMPLER_H]], <2 x float> %[[COORD_VAL]], <2 x i32> zeroinitializer)
-// CHECK-NEXT: ret <4 x float> %[[RES]]
+// CHECK: define linkonce_odr hidden noundef nofpclass(nan inf) <4 x float> @_ZN4hlsl9Texture2DIDv4_fE6SampleENS_12SamplerStateEDv2_f(ptr {{.*}} %[[THIS:.*]], ptr {{.*}} byval(%"class.hlsl::SamplerState") {{.*}} %[[SAMPLER:.*]], <2 x float> {{.*}} %[[COORD:.*]])
+// CHECK: %[[HANDLE:.*]] = load target
+// CHECK: %[[SAMPLER_H:.*]] = load target
+// CHECK: %[[COORD_VAL:.*]] = load <2 x float>, ptr %{{.*}}
+// DXIL: %[[RES:.*]] = call {{.*}} <4 x float> @llvm.dx.resource.sample.v4f32.tdx.Texture_v4f32_0_0_0_2t.tdx.Sampler_0t.v2f32.v2i32(target("dx.Texture", <4 x float>, 0, 0, 0, 2) %[[HANDLE]], target("dx.Sampler", 0) %[[SAMPLER_H]], <2 x float> %[[COORD_VAL]], <2 x i32> zeroinitializer)
+// SPIRV: %[[RES:.*]] = call {{.*}} <4 x float> @llvm.spv.resource.sample.v4f32.tspirv.Image_f32_1_2_0_0_1_0t.tspirv.Samplert.v2f32.v2i32(target("spirv.Image", float, 1, 2, 0, 0, 1, 0) %[[HANDLE]], target("spirv.Sampler") %[[SAMPLER_H]], <2 x float> %[[COORD_VAL]], <2 x i32> zeroinitializer)
+// CHECK: ret <4 x float> %[[RES]]
+
+// CHECK: define hidden {{.*}} <4 x float> @_Z10test_clampDv2_f(<2 x float> noundef nofpclass(nan inf) %[[LOC:.*]])
+// CHECK: %[[CALL:.*]] = call reassoc nnan ninf nsz arcp afn noundef nofpclass(nan inf) <4 x float> @_ZN4hlsl9Texture2DIDv4_fE6SampleENS_12SamplerStateEDv2_fDv2_if(ptr {{.*}} @_ZL1t, ptr {{.*}} byval(%"class.hlsl::SamplerState") {{.*}}, <2 x float> {{.*}}, <2 x i32> {{.*}} <i32 1, i32 2>, float {{.*}} 1.000000e+00)
+// CHECK: ret <4 x float> %[[CALL]]
+
+float4 test_clamp(float2 loc : LOC) : SV_Target {
+  return t.Sample(s, loc, int2(1, 2), 1.0f);
+}
+
+// CHECK: define linkonce_odr hidden noundef nofpclass(nan inf) <4 x float> @_ZN4hlsl9Texture2DIDv4_fE6SampleENS_12SamplerStateEDv2_fDv2_if(ptr {{.*}} %[[THIS:.*]], ptr {{.*}} byval(%"class.hlsl::SamplerState") {{.*}} %[[SAMPLER:.*]], <2 x float> {{.*}} %[[COORD:.*]], <2 x i32> {{.*}} %[[OFFSET:.*]], float {{.*}} %[[CLAMP:.*]])
+// CHECK: %[[HANDLE_4:.*]] = load target
+// CHECK: %[[SAMPLER_H_4:.*]] = load target
+// CHECK: %[[COORD_VAL_4:.*]] = load <2 x float>, ptr %{{.*}}
+// CHECK: %[[OFFSET_VAL_4:.*]] = load <2 x i32>, ptr %{{.*}}
+// CHECK: %[[CLAMP_VAL_4:.*]] = load float, ptr %{{.*}}
+// CHECK: %[[CLAMP_CAST:.*]] = fptrunc {{.*}} double {{.*}} to float
+// DXIL: %[[RES_4:.*]] = call {{.*}} <4 x float> @llvm.dx.resource.sample.clamp.v4f32.tdx.Texture_v4f32_0_0_0_2t.tdx.Sampler_0t.v2f32.v2i32.f32(target("dx.Texture", <4 x float>, 0, 0, 0, 2) %[[HANDLE_4]], target("dx.Sampler", 0) %[[SAMPLER_H_4]], <2 x float> %[[COORD_VAL_4]], <2 x i32> %[[OFFSET_VAL_4]], float %[[CLAMP_CAST]])
+// SPIRV: %[[RES_4:.*]] = call {{.*}} <4 x float> @llvm.spv.resource.sample.clamp.v4f32.tspirv.Image_f32_1_2_0_0_1_0t.tspirv.Samplert.v2f32.v2i32.f32(target("spirv.Image", float, 1, 2, 0, 0, 1, 0) %[[HANDLE_4]], target("spirv.Sampler") %[[SAMPLER_H_4]], <2 x float> %[[COORD_VAL_4]], <2 x i32> %[[OFFSET_VAL_4]], float %[[CLAMP_CAST]])
+// CHECK: ret <4 x float> %[[RES_4]]

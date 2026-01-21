@@ -464,8 +464,17 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
     }
 
     llvm::Type *RetTy = ConvertType(E->getType());
+    if (E->getNumArgs() <= 4) {
+      return Builder.CreateIntrinsic(
+          RetTy, CGM.getHLSLRuntime().getSampleIntrinsic(), Args);
+    }
+
+    llvm::Value *Clamp = EmitScalarExpr(E->getArg(4));
+    if (Clamp->getType()->isDoubleTy())
+      Clamp = Builder.CreateFPTrunc(Clamp, Builder.getFloatTy());
+    Args.push_back(Clamp);
     return Builder.CreateIntrinsic(
-        RetTy, CGM.getHLSLRuntime().getSampleIntrinsic(), Args);
+        RetTy, CGM.getHLSLRuntime().getSampleClampIntrinsic(), Args);
   }
   case Builtin::BI__builtin_hlsl_resource_load_with_status: {
     Value *HandleOp = EmitScalarExpr(E->getArg(0));

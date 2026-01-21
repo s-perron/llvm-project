@@ -3350,7 +3350,7 @@ bool SemaHLSL::CheckBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
     break;
   }
   case Builtin::BI__builtin_hlsl_resource_sample: {
-    if (SemaRef.checkArgCountRange(TheCall, 3, 4) ||
+    if (SemaRef.checkArgCountRange(TheCall, 3, 5) ||
         CheckResourceHandle(&SemaRef, TheCall, 0) ||
         CheckResourceHandle(&SemaRef, TheCall, 1,
                             [](const HLSLAttributedResourceType *ResType) {

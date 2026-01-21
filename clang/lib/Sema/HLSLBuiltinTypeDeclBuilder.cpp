@@ -1252,13 +1252,25 @@ BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addSampleMethods() {
       .finalize();
 
   // T Sample(SamplerState s, float2 location, int2 offset)
-  return BuiltinTypeMethodBuilder(*this, "Sample", ReturnType)
+  BuiltinTypeMethodBuilder(*this, "Sample", ReturnType)
       .addParam("Sampler", SamplerStateType)
       .addParam("Location", Float2Ty)
       .addParam("Offset", Int2Ty)
       .accessFieldOnResource(PH::_0, SamplerHandleField)
       .callBuiltin("__builtin_hlsl_resource_sample", ReturnType, PH::Handle,
                    PH::LastStmt, PH::_1, PH::_2)
+      .returnValue(PH::LastStmt)
+      .finalize();
+
+  // T Sample(SamplerState s, float2 location, int2 offset, float clamp)
+  return BuiltinTypeMethodBuilder(*this, "Sample", ReturnType)
+      .addParam("Sampler", SamplerStateType)
+      .addParam("Location", Float2Ty)
+      .addParam("Offset", Int2Ty)
+      .addParam("Clamp", FloatTy)
+      .accessFieldOnResource(PH::_0, SamplerHandleField)
+      .callBuiltin("__builtin_hlsl_resource_sample", ReturnType, PH::Handle,
+                   PH::LastStmt, PH::_1, PH::_2, PH::_3)
       .returnValue(PH::LastStmt)
       .finalize();
 }
