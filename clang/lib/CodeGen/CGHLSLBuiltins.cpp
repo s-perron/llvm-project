@@ -471,7 +471,8 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
 
     llvm::Value *Clamp = EmitScalarExpr(E->getArg(4));
     // The builtin is defined with variadic arguments, so the clamp parameter
-    // might have been promoted to double. The intrinsic requires a 32-bit float.
+    // might have been promoted to double. The intrinsic requires a 32-bit
+    // float.
     if (Clamp->getType() != Builder.getFloatTy())
       Clamp = Builder.CreateFPCast(Clamp, Builder.getFloatTy());
     Args.push_back(Clamp);

@@ -3279,14 +3279,16 @@ static bool CheckResourceHandle(
   return false;
 }
 
-static bool CheckVectorElementCount(Sema *S, QualType PassedType, QualType BaseType,
-                                    unsigned ExpectedCount, SourceLocation Loc) {
+static bool CheckVectorElementCount(Sema *S, QualType PassedType,
+                                    QualType BaseType, unsigned ExpectedCount,
+                                    SourceLocation Loc) {
   unsigned PassedCount = 1;
   if (const auto *VecTy = PassedType->getAs<VectorType>())
     PassedCount = VecTy->getNumElements();
 
   if (PassedCount != ExpectedCount) {
-    QualType ExpectedType = S->Context.getExtVectorType(BaseType, ExpectedCount);
+    QualType ExpectedType =
+        S->Context.getExtVectorType(BaseType, ExpectedCount);
     S->Diag(Loc, diag::err_typecheck_convert_incompatible)
         << PassedType << ExpectedType << 1 << 0 << 0;
     return true;
@@ -3364,65 +3366,65 @@ bool SemaHLSL::CheckBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
 
     break;
   }
-    case Builtin::BI__builtin_hlsl_resource_sample: {
-      if (SemaRef.checkArgCountRange(TheCall, 3, 5) ||
-          CheckResourceHandle(&SemaRef, TheCall, 0) ||
-          CheckResourceHandle(&SemaRef, TheCall, 1,
-                              [](const HLSLAttributedResourceType *ResType) {
-                                return ResType->getAttrs().ResourceClass !=
-                                       llvm::hlsl::ResourceClass::Sampler;
-                              }))
-        return true;
-  
-      auto *ResourceTy =
-          TheCall->getArg(0)->getType()->castAs<HLSLAttributedResourceType>();
-      
-          unsigned ExpectedDim = 0;
-          switch (ResourceTy->getAttrs().ResourceDimension) {
-          case llvm::dxil::ResourceDimension::Dimension1D:
-            ExpectedDim = 1;
-            break;
-          case llvm::dxil::ResourceDimension::Dimension2D:
-            ExpectedDim = 2;
-            break;
-          case llvm::dxil::ResourceDimension::Dimension3D:
-          case llvm::dxil::ResourceDimension::DimensionCube:
-            ExpectedDim = 3;
-            break;
-          case llvm::dxil::ResourceDimension::DimensionUnknown:
-          default:
-            break;
-          }
-      
-      if (ExpectedDim != 0) {
-        if (CheckVectorElementCount(&SemaRef, TheCall->getArg(2)->getType(),
-                                    SemaRef.Context.FloatTy, ExpectedDim,
-                                    TheCall->getArg(2)->getBeginLoc()))
-          return true;
-  
-        if (TheCall->getNumArgs() > 3) {
-          if (CheckVectorElementCount(&SemaRef, TheCall->getArg(3)->getType(),
-                                      SemaRef.Context.IntTy, ExpectedDim,
-                                      TheCall->getArg(3)->getBeginLoc()))
-            return true;
-        }
-      }
-            if (TheCall->getNumArgs() > 4) {
-        QualType ClampTy = TheCall->getArg(4)->getType();
-        if (!ClampTy->isFloatingType() || ClampTy->isVectorType()) {
-          SemaRef.Diag(TheCall->getArg(4)->getBeginLoc(),
-                       diag::err_typecheck_convert_incompatible)
-              << ClampTy << SemaRef.Context.FloatTy << 1 << 0 << 0;
-          return true;
-        }
-      }
-  
-      QualType ReturnType = ResourceTy->getContainedType();
-      TheCall->setType(ReturnType);
-  
+  case Builtin::BI__builtin_hlsl_resource_sample: {
+    if (SemaRef.checkArgCountRange(TheCall, 3, 5) ||
+        CheckResourceHandle(&SemaRef, TheCall, 0) ||
+        CheckResourceHandle(&SemaRef, TheCall, 1,
+                            [](const HLSLAttributedResourceType *ResType) {
+                              return ResType->getAttrs().ResourceClass !=
+                                     llvm::hlsl::ResourceClass::Sampler;
+                            }))
+      return true;
+
+    auto *ResourceTy =
+        TheCall->getArg(0)->getType()->castAs<HLSLAttributedResourceType>();
+
+    unsigned ExpectedDim = 0;
+    switch (ResourceTy->getAttrs().ResourceDimension) {
+    case llvm::dxil::ResourceDimension::Dimension1D:
+      ExpectedDim = 1;
+      break;
+    case llvm::dxil::ResourceDimension::Dimension2D:
+      ExpectedDim = 2;
+      break;
+    case llvm::dxil::ResourceDimension::Dimension3D:
+    case llvm::dxil::ResourceDimension::DimensionCube:
+      ExpectedDim = 3;
+      break;
+    case llvm::dxil::ResourceDimension::DimensionUnknown:
+    default:
       break;
     }
-    case Builtin::BI__builtin_hlsl_resource_uninitializedhandle: {
+
+    if (ExpectedDim != 0) {
+      if (CheckVectorElementCount(&SemaRef, TheCall->getArg(2)->getType(),
+                                  SemaRef.Context.FloatTy, ExpectedDim,
+                                  TheCall->getArg(2)->getBeginLoc()))
+        return true;
+
+      if (TheCall->getNumArgs() > 3) {
+        if (CheckVectorElementCount(&SemaRef, TheCall->getArg(3)->getType(),
+                                    SemaRef.Context.IntTy, ExpectedDim,
+                                    TheCall->getArg(3)->getBeginLoc()))
+          return true;
+      }
+    }
+    if (TheCall->getNumArgs() > 4) {
+      QualType ClampTy = TheCall->getArg(4)->getType();
+      if (!ClampTy->isFloatingType() || ClampTy->isVectorType()) {
+        SemaRef.Diag(TheCall->getArg(4)->getBeginLoc(),
+                     diag::err_typecheck_convert_incompatible)
+            << ClampTy << SemaRef.Context.FloatTy << 1 << 0 << 0;
+        return true;
+      }
+    }
+
+    QualType ReturnType = ResourceTy->getContainedType();
+    TheCall->setType(ReturnType);
+
+    break;
+  }
+  case Builtin::BI__builtin_hlsl_resource_uninitializedhandle: {
     assert(TheCall->getNumArgs() == 1 && "expected 1 arg");
     // Update return type to be the attributed resource type from arg0.
     QualType ResourceTy = TheCall->getArg(0)->getType();
