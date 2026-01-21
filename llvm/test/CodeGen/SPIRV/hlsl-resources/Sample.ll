@@ -46,7 +46,7 @@ entry:
 ; CHECK: %[[img_val4:[0-9]+]] = OpLoad %[[image]]
 ; CHECK: %[[sampler_val4:[0-9]+]] = OpLoad %[[sampler]]
 ; CHECK: %[[si4:[0-9]+]] = OpSampledImage %[[sampled_image]] %[[img_val4]] %[[sampler_val4]]
-; CHECK: %[[res3:[0-9]+]] = OpImageSampleImplicitLod %[[v4float]] %[[si4]] %[[coord1]] ConstOffset %[[offset1]] MinLod %[[minlod_val]]{{[ ]*$}}
+; CHECK: %[[res3:[0-9]+]] = OpImageSampleImplicitLod %[[v4float]] %[[si4]] %[[coord1]] ConstOffset|MinLod %[[offset1]] %[[minlod_val]]{{[ ]*$}}
   %res3 = call <4 x float> @llvm.spv.resource.sample.clamp.v4f32.tspirv.Image_f32_1_2_0_0_1_0t.tspirv.Samplert.v2f32.v2i32(target("spirv.Image", float, 1, 2, 0, 0, 1, 0) %img, target("spirv.Sampler") %sampler, <2 x float> <float 0.5, float 0.5>, <2 x i32> <i32 1, i32 1>, float 1.0)
 
   %tmp0 = fadd <4 x float> %res0, %res1
