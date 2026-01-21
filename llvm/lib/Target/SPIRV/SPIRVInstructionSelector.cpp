@@ -3863,7 +3863,8 @@ bool SPIRVInstructionSelector::selectIntrinsic(Register ResVReg,
   case Intrinsic::spv_resource_load_typedbuffer: {
     return selectReadImageIntrinsic(ResVReg, ResType, I);
   }
-  case Intrinsic::spv_resource_sample: {
+  case Intrinsic::spv_resource_sample:
+  case Intrinsic::spv_resource_sample_clamp: {
     return selectSampleIntrinsic(ResVReg, ResType, I);
   }
   case Intrinsic::spv_resource_getpointer: {
@@ -4073,8 +4074,12 @@ bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
   Register SamplerReg = I.getOperand(3).getReg();
   Register CoordinateReg = I.getOperand(4).getReg();
   std::optional<Register> OffsetReg;
+  std::optional<Register> ClampReg;
+
   if (I.getNumOperands() > 5)
     OffsetReg = I.getOperand(5).getReg();
+  if (I.getNumOperands() > 6)
+    ClampReg = I.getOperand(6).getReg();
 
   DebugLoc Loc = I.getDebugLoc();
 
@@ -4115,6 +4120,7 @@ bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
           .addUse(SampledImageReg)
           .addUse(CoordinateReg);
 
+  uint32_t ImageOperands = 0;
   if (OffsetReg) {
     // Check if the offset is a constant zero.
     MachineInstr *OffsetDef = MRI->getVRegDef(*OffsetReg);
@@ -4152,9 +4158,20 @@ bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
     }
 
     if (!IsZero) {
-      MIB.addImm(0x8); // ConstOffset
-      MIB.addUse(*OffsetReg);
+      ImageOperands |= 0x8; // ConstOffset
     }
+  }
+
+  if (ClampReg) {
+    ImageOperands |= 0x80; // MinLod
+  }
+
+  if (ImageOperands != 0) {
+    MIB.addImm(ImageOperands);
+    if (ImageOperands & 0x8)
+      MIB.addUse(*OffsetReg);
+    if (ImageOperands & 0x80)
+      MIB.addUse(*ClampReg);
   }
 
   return MIB.constrainAllUses(TII, TRI, RBI);
