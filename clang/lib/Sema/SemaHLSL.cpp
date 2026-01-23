@@ -3296,9 +3296,22 @@ static bool CheckVectorElementCount(Sema *S, QualType PassedType,
   return false;
 }
 
-static bool CheckSamplingBuiltin(Sema &S, CallExpr *TheCall, bool HasBias) {
-  unsigned MinArgs = HasBias ? 4 : 3;
-  unsigned MaxArgs = HasBias ? 6 : 5;
+enum class SampleKind { Sample, Bias, Grad };
+
+static bool CheckSamplingBuiltin(Sema &S, CallExpr *TheCall, SampleKind Kind) {
+  unsigned MinArgs, MaxArgs;
+  if (Kind == SampleKind::Sample) {
+    MinArgs = 3;
+    MaxArgs = 5;
+  } else if (Kind == SampleKind::Bias) {
+    MinArgs = 4;
+    MaxArgs = 6;
+  } else {
+    assert(Kind == SampleKind::Grad);
+    MinArgs = 5;
+    MaxArgs = 7;
+  }
+
   if (S.checkArgCountRange(TheCall, MinArgs, MaxArgs) ||
       CheckResourceHandle(&S, TheCall, 0) ||
       CheckResourceHandle(&S, TheCall, 1,
@@ -3334,33 +3347,46 @@ static bool CheckSamplingBuiltin(Sema &S, CallExpr *TheCall, bool HasBias) {
       return true;
   }
 
-  if (HasBias) {
-    QualType BiasTy = TheCall->getArg(3)->getType();
+  unsigned NextIdx = 3;
+  if (Kind == SampleKind::Bias) {
+    QualType BiasTy = TheCall->getArg(NextIdx)->getType();
     if (!BiasTy->isFloatingType() || BiasTy->isVectorType()) {
-      S.Diag(TheCall->getArg(3)->getBeginLoc(),
+      S.Diag(TheCall->getArg(NextIdx)->getBeginLoc(),
              diag::err_typecheck_convert_incompatible)
           << BiasTy << S.Context.FloatTy << 1 << 0 << 0;
       return true;
     }
+    NextIdx++;
+  } else if (Kind == SampleKind::Grad) {
+    if (ExpectedDim != 0) {
+      if (CheckVectorElementCount(&S, TheCall->getArg(NextIdx)->getType(),
+                                  S.Context.FloatTy, ExpectedDim,
+                                  TheCall->getArg(NextIdx)->getBeginLoc()))
+        return true;
+      if (CheckVectorElementCount(&S, TheCall->getArg(NextIdx + 1)->getType(),
+                                  S.Context.FloatTy, ExpectedDim,
+                                  TheCall->getArg(NextIdx + 1)->getBeginLoc()))
+        return true;
+    }
+    NextIdx += 2;
   }
 
   // Offset
-  unsigned OffsetIdx = HasBias ? 4 : 3;
-  if (TheCall->getNumArgs() > OffsetIdx) {
+  if (TheCall->getNumArgs() > NextIdx) {
     if (ExpectedDim != 0) {
-      if (CheckVectorElementCount(&S, TheCall->getArg(OffsetIdx)->getType(),
+      if (CheckVectorElementCount(&S, TheCall->getArg(NextIdx)->getType(),
                                   S.Context.IntTy, ExpectedDim,
-                                  TheCall->getArg(OffsetIdx)->getBeginLoc()))
+                                  TheCall->getArg(NextIdx)->getBeginLoc()))
         return true;
     }
+    NextIdx++;
   }
 
   // Clamp
-  unsigned ClampIdx = HasBias ? 5 : 4;
-  if (TheCall->getNumArgs() > ClampIdx) {
-    QualType ClampTy = TheCall->getArg(ClampIdx)->getType();
+  if (TheCall->getNumArgs() > NextIdx) {
+    QualType ClampTy = TheCall->getArg(NextIdx)->getType();
     if (!ClampTy->isFloatingType() || ClampTy->isVectorType()) {
-      S.Diag(TheCall->getArg(ClampIdx)->getBeginLoc(),
+      S.Diag(TheCall->getArg(NextIdx)->getBeginLoc(),
              diag::err_typecheck_convert_incompatible)
           << ClampTy << S.Context.FloatTy << 1 << 0 << 0;
       return true;
@@ -3444,9 +3470,11 @@ bool SemaHLSL::CheckBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
     break;
   }
   case Builtin::BI__builtin_hlsl_resource_sample:
-    return CheckSamplingBuiltin(SemaRef, TheCall, /*HasBias=*/false);
+    return CheckSamplingBuiltin(SemaRef, TheCall, SampleKind::Sample);
   case Builtin::BI__builtin_hlsl_resource_sample_bias:
-    return CheckSamplingBuiltin(SemaRef, TheCall, /*HasBias=*/true);
+    return CheckSamplingBuiltin(SemaRef, TheCall, SampleKind::Bias);
+  case Builtin::BI__builtin_hlsl_resource_sample_grad:
+    return CheckSamplingBuiltin(SemaRef, TheCall, SampleKind::Grad);
 
   case Builtin::BI__builtin_hlsl_resource_uninitializedhandle: {
     assert(TheCall->getNumArgs() == 1 && "expected 1 arg");

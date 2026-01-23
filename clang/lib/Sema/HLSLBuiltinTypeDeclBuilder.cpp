@@ -1345,6 +1345,81 @@ BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addSampleBiasMethods() {
       .finalize();
 }
 
+BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addSampleGradMethods() {
+  assert(!Record->isCompleteDefinition() && "record is already complete");
+
+  ASTContext &AST = Record->getASTContext();
+  QualType ReturnType = getFirstTemplateTypeParam();
+
+  // Look up SamplerState
+  IdentifierInfo &SamplerStateII = AST.Idents.get("SamplerState");
+  LookupResult Result(SemaRef, &SamplerStateII, SourceLocation(),
+                      Sema::LookupTagName);
+  SemaRef.LookupQualifiedName(Result, Record->getDeclContext());
+  assert(!Result.empty() && "SamplerState not found");
+  QualType SamplerStateType =
+      AST.getTypeDeclType(Result.getAsSingle<TypeDecl>());
+  SemaRef.RequireCompleteType(SourceLocation(), SamplerStateType,
+                              diag::err_tentative_def_incomplete_type);
+
+  // TODO: The location type depends on the texture dimension.
+  // For Texture2D it is float2.
+  QualType FloatTy = AST.FloatTy;
+  QualType Float2Ty = AST.getExtVectorType(FloatTy, 2);
+
+  QualType IntTy = AST.IntTy;
+  QualType Int2Ty = AST.getExtVectorType(IntTy, 2);
+
+  auto *RT = SamplerStateType->getAsCXXRecordDecl();
+  assert(RT);
+  assert(!RT->field_empty());
+  FieldDecl *SamplerHandleField = *RT->field_begin();
+
+  using PH = BuiltinTypeMethodBuilder::PlaceHolder;
+
+  // T SampleGrad(SamplerState s, float2 location, float2 ddx, float2 ddy)
+  BuiltinTypeMethodBuilder(*this, "SampleGrad", ReturnType)
+      .addParam("Sampler", SamplerStateType)
+      .addParam("Location", Float2Ty)
+      .addParam("DDX", Float2Ty)
+      .addParam("DDY", Float2Ty)
+      .accessFieldOnResource(PH::_0, SamplerHandleField)
+      .callBuiltin("__builtin_hlsl_resource_sample_grad", ReturnType,
+                   PH::Handle, PH::LastStmt, PH::_1, PH::_2, PH::_3)
+      .returnValue(PH::LastStmt)
+      .finalize();
+
+  // T SampleGrad(SamplerState s, float2 location, float2 ddx, float2 ddy,
+  // int2 offset)
+  BuiltinTypeMethodBuilder(*this, "SampleGrad", ReturnType)
+      .addParam("Sampler", SamplerStateType)
+      .addParam("Location", Float2Ty)
+      .addParam("DDX", Float2Ty)
+      .addParam("DDY", Float2Ty)
+      .addParam("Offset", Int2Ty)
+      .accessFieldOnResource(PH::_0, SamplerHandleField)
+      .callBuiltin("__builtin_hlsl_resource_sample_grad", ReturnType,
+                   PH::Handle, PH::LastStmt, PH::_1, PH::_2, PH::_3, PH::_4)
+      .returnValue(PH::LastStmt)
+      .finalize();
+
+  // T SampleGrad(SamplerState s, float2 location, float2 ddx, float2 ddy,
+  // int2 offset, float clamp)
+  return BuiltinTypeMethodBuilder(*this, "SampleGrad", ReturnType)
+      .addParam("Sampler", SamplerStateType)
+      .addParam("Location", Float2Ty)
+      .addParam("DDX", Float2Ty)
+      .addParam("DDY", Float2Ty)
+      .addParam("Offset", Int2Ty)
+      .addParam("Clamp", FloatTy)
+      .accessFieldOnResource(PH::_0, SamplerHandleField)
+      .callBuiltin("__builtin_hlsl_resource_sample_grad", ReturnType,
+                   PH::Handle, PH::LastStmt, PH::_1, PH::_2, PH::_3, PH::_4,
+                   PH::_5)
+      .returnValue(PH::LastStmt)
+      .finalize();
+}
+
 FieldDecl *BuiltinTypeDeclBuilder::getResourceHandleField() const {
   auto I = Fields.find("__handle");
   assert(I != Fields.end() &&

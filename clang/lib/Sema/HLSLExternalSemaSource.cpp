@@ -539,6 +539,7 @@ void HLSLExternalSemaSource::defineHLSLTypesWithForwardDeclarations() {
         .addStaticInitializationFunctions(false)
         .addSampleMethods()
         .addSampleBiasMethods()
+        .addSampleGradMethods()
         .completeDefinition();
   });
 }
