@@ -161,6 +161,8 @@ public:
                                    resource_getpointer)
   GENERATE_HLSL_INTRINSIC_FUNCTION(Sample, resource_sample)
   GENERATE_HLSL_INTRINSIC_FUNCTION(SampleClamp, resource_sample_clamp)
+  GENERATE_HLSL_INTRINSIC_FUNCTION(SampleBias, resource_samplebias)
+  GENERATE_HLSL_INTRINSIC_FUNCTION(SampleBiasClamp, resource_samplebias_clamp)
   GENERATE_HLSL_INTRINSIC_FUNCTION(CreateHandleFromBinding,
                                    resource_handlefrombinding)
   GENERATE_HLSL_INTRINSIC_FUNCTION(CreateHandleFromImplicitBinding,

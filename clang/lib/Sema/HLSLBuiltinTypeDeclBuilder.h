@@ -93,6 +93,7 @@ public:
   // Builtin types methods
   BuiltinTypeDeclBuilder &addLoadMethods();
   BuiltinTypeDeclBuilder &addSampleMethods();
+  BuiltinTypeDeclBuilder &addSampleBiasMethods();
   BuiltinTypeDeclBuilder &addIncrementCounterMethod();
   BuiltinTypeDeclBuilder &addDecrementCounterMethod();
   BuiltinTypeDeclBuilder &addHandleAccessFunction(DeclarationName &Name,

@@ -90,7 +90,17 @@ def int_dx_resource_sample_clamp
                             [llvm_any_ty, llvm_any_ty, llvm_any_ty, llvm_any_ty,
                              llvm_float_ty],
                             [IntrReadMem]>;
+def int_dx_resource_samplebias
+    : DefaultAttrsIntrinsic<[llvm_any_ty],
+                            [llvm_any_ty, llvm_any_ty, llvm_any_ty,
+                             llvm_float_ty, llvm_any_ty],
+                            [IntrReadMem]>;
 
+def int_dx_resource_samplebias_clamp
+    : DefaultAttrsIntrinsic<[llvm_any_ty],
+                            [llvm_any_ty, llvm_any_ty, llvm_any_ty,
+                             llvm_float_ty, llvm_any_ty, llvm_float_ty],
+                            [IntrReadMem]>;
 // Cast between target extension handle types and dxil-style opaque handles
 def int_dx_resource_casthandle : Intrinsic<[llvm_any_ty], [llvm_any_ty]>;
 
