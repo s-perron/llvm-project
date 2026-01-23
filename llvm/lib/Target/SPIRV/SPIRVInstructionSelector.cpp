@@ -3911,7 +3911,9 @@ bool SPIRVInstructionSelector::selectIntrinsic(Register ResVReg,
     return selectReadImageIntrinsic(ResVReg, ResType, I);
   }
   case Intrinsic::spv_resource_sample:
-  case Intrinsic::spv_resource_sample_clamp: {
+  case Intrinsic::spv_resource_sample_clamp:
+  case Intrinsic::spv_resource_samplebias:
+  case Intrinsic::spv_resource_samplebias_clamp: {
     return selectSampleIntrinsic(ResVReg, ResType, I);
   }
   case Intrinsic::spv_resource_getpointer: {
@@ -4117,16 +4119,30 @@ bool SPIRVInstructionSelector::selectReadImageIntrinsic(
 bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
                                                      const SPIRVType *ResType,
                                                      MachineInstr &I) const {
+  auto &Intr = cast<GIntrinsic>(I);
+  Intrinsic::ID IID = Intr.getIntrinsicID();
+
   Register ImageReg = I.getOperand(2).getReg();
   Register SamplerReg = I.getOperand(3).getReg();
   Register CoordinateReg = I.getOperand(4).getReg();
+
+  std::optional<Register> BiasReg;
   std::optional<Register> OffsetReg;
   std::optional<Register> ClampReg;
 
-  if (I.getNumOperands() > 5)
-    OffsetReg = I.getOperand(5).getReg();
-  if (I.getNumOperands() > 6)
-    ClampReg = I.getOperand(6).getReg();
+  if (IID == Intrinsic::spv_resource_samplebias ||
+      IID == Intrinsic::spv_resource_samplebias_clamp) {
+    BiasReg = I.getOperand(5).getReg();
+    if (I.getNumOperands() > 6)
+      OffsetReg = I.getOperand(6).getReg();
+    if (I.getNumOperands() > 7)
+      ClampReg = I.getOperand(7).getReg();
+  } else {
+    if (I.getNumOperands() > 5)
+      OffsetReg = I.getOperand(5).getReg();
+    if (I.getNumOperands() > 6)
+      ClampReg = I.getOperand(6).getReg();
+  }
 
   DebugLoc Loc = I.getDebugLoc();
 
@@ -4168,6 +4184,9 @@ bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
           .addUse(CoordinateReg);
 
   uint32_t ImageOperands = 0;
+  if (BiasReg) {
+    ImageOperands |= 0x1; // Bias
+  }
   if (OffsetReg && !isScalarOrVectorIntConstantZero(*OffsetReg)) {
     ImageOperands |= 0x8; // ConstOffset
   }
@@ -4178,6 +4197,8 @@ bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
 
   if (ImageOperands != 0) {
     MIB.addImm(ImageOperands);
+    if (ImageOperands & 0x1)
+      MIB.addUse(*BiasReg);
     if (ImageOperands & 0x8)
       MIB.addUse(*OffsetReg);
     if (ImageOperands & 0x80)
