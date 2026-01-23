@@ -3913,7 +3913,9 @@ bool SPIRVInstructionSelector::selectIntrinsic(Register ResVReg,
   case Intrinsic::spv_resource_sample:
   case Intrinsic::spv_resource_sample_clamp:
   case Intrinsic::spv_resource_samplebias:
-  case Intrinsic::spv_resource_samplebias_clamp: {
+  case Intrinsic::spv_resource_samplebias_clamp:
+  case Intrinsic::spv_resource_samplegrad:
+  case Intrinsic::spv_resource_samplegrad_clamp: {
     return selectSampleIntrinsic(ResVReg, ResType, I);
   }
   case Intrinsic::spv_resource_getpointer: {
@@ -4129,6 +4131,10 @@ bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
   std::optional<Register> BiasReg;
   std::optional<Register> OffsetReg;
   std::optional<Register> ClampReg;
+  std::optional<Register> DDXReg;
+  std::optional<Register> DDYReg;
+
+  bool IsExplicitLod = false;
 
   if (IID == Intrinsic::spv_resource_samplebias ||
       IID == Intrinsic::spv_resource_samplebias_clamp) {
@@ -4137,6 +4143,15 @@ bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
       OffsetReg = I.getOperand(6).getReg();
     if (I.getNumOperands() > 7)
       ClampReg = I.getOperand(7).getReg();
+  } else if (IID == Intrinsic::spv_resource_samplegrad ||
+             IID == Intrinsic::spv_resource_samplegrad_clamp) {
+    IsExplicitLod = true;
+    DDXReg = I.getOperand(5).getReg();
+    DDYReg = I.getOperand(6).getReg();
+    if (I.getNumOperands() > 7)
+      OffsetReg = I.getOperand(7).getReg();
+    if (I.getNumOperands() > 8)
+      ClampReg = I.getOperand(8).getReg();
   } else {
     if (I.getNumOperands() > 5)
       OffsetReg = I.getOperand(5).getReg();
@@ -4176,16 +4191,20 @@ bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
   if (!Succeed)
     return false;
 
-  auto MIB =
-      BuildMI(*I.getParent(), I, Loc, TII.get(SPIRV::OpImageSampleImplicitLod))
-          .addDef(ResVReg)
-          .addUse(GR.getSPIRVTypeID(ResType))
-          .addUse(SampledImageReg)
-          .addUse(CoordinateReg);
+  unsigned Opcode = IsExplicitLod ? SPIRV::OpImageSampleExplicitLod
+                                  : SPIRV::OpImageSampleImplicitLod;
+  auto MIB = BuildMI(*I.getParent(), I, Loc, TII.get(Opcode))
+                 .addDef(ResVReg)
+                 .addUse(GR.getSPIRVTypeID(ResType))
+                 .addUse(SampledImageReg)
+                 .addUse(CoordinateReg);
 
   uint32_t ImageOperands = 0;
   if (BiasReg) {
     ImageOperands |= 0x1; // Bias
+  }
+  if (DDXReg && DDYReg) {
+    ImageOperands |= 0x4; // Grad
   }
   if (OffsetReg && !isScalarOrVectorIntConstantZero(*OffsetReg)) {
     ImageOperands |= 0x8; // ConstOffset
@@ -4199,6 +4218,10 @@ bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
     MIB.addImm(ImageOperands);
     if (ImageOperands & 0x1)
       MIB.addUse(*BiasReg);
+    if (ImageOperands & 0x4) {
+      MIB.addUse(*DDXReg);
+      MIB.addUse(*DDYReg);
+    }
     if (ImageOperands & 0x8)
       MIB.addUse(*OffsetReg);
     if (ImageOperands & 0x80)
