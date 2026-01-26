@@ -581,6 +581,40 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
           RetTy, CGM.getHLSLRuntime().getSampleGradClampIntrinsic(), Args);
     }
   }
+  case Builtin::BI__builtin_hlsl_resource_sample_level: {
+    Value *HandleOp = EmitScalarExpr(E->getArg(0));
+    Value *SamplerOp = EmitScalarExpr(E->getArg(1));
+    Value *CoordOp = EmitScalarExpr(E->getArg(2));
+    Value *LODOp = EmitScalarExpr(E->getArg(3));
+    if (LODOp->getType() != Builder.getFloatTy())
+      LODOp = Builder.CreateFPCast(LODOp, Builder.getFloatTy());
+
+    SmallVector<Value *, 5> Args; // Max 5 arguments for SampleLevel
+    Args.push_back(HandleOp);
+    Args.push_back(SamplerOp);
+    Args.push_back(CoordOp);
+    Args.push_back(LODOp);
+
+    // Handle optional Offset (E->getArg(4))
+    Value *OffsetOp;
+    if (E->getNumArgs() > 4) { // if E has 5 arguments (Handle, Sampler, Coord,
+                               // LOD, Offset)
+      OffsetOp = EmitScalarExpr(E->getArg(4));
+    } else {
+      // Default offset is 0.
+      llvm::Type *CoordTy = CoordOp->getType();
+      llvm::Type *Int32Ty = Builder.getInt32Ty();
+      llvm::Type *OffsetTy = Int32Ty;
+      if (auto *VT = dyn_cast<llvm::FixedVectorType>(CoordTy))
+        OffsetTy = llvm::FixedVectorType::get(Int32Ty, VT->getNumElements());
+      OffsetOp = llvm::Constant::getNullValue(OffsetTy);
+    }
+    Args.push_back(OffsetOp);
+
+    llvm::Type *RetTy = ConvertType(E->getType());
+    return Builder.CreateIntrinsic(
+        RetTy, CGM.getHLSLRuntime().getSampleLevelIntrinsic(), Args);
+  }
   case Builtin::BI__builtin_hlsl_resource_load_with_status: {
     Value *HandleOp = EmitScalarExpr(E->getArg(0));
     Value *IndexOp = EmitScalarExpr(E->getArg(1));

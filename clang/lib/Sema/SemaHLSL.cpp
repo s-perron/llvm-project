@@ -3296,7 +3296,7 @@ static bool CheckVectorElementCount(Sema *S, QualType PassedType,
   return false;
 }
 
-enum class SampleKind { Sample, Bias, Grad };
+enum class SampleKind { Sample, Bias, Grad, Level };
 
 static bool CheckSamplingBuiltin(Sema &S, CallExpr *TheCall, SampleKind Kind) {
   unsigned MinArgs, MaxArgs;
@@ -3306,10 +3306,13 @@ static bool CheckSamplingBuiltin(Sema &S, CallExpr *TheCall, SampleKind Kind) {
   } else if (Kind == SampleKind::Bias) {
     MinArgs = 4;
     MaxArgs = 6;
-  } else {
-    assert(Kind == SampleKind::Grad);
+  } else if (Kind == SampleKind::Grad) {
     MinArgs = 5;
     MaxArgs = 7;
+  } else {
+    assert(Kind == SampleKind::Level);
+    MinArgs = 4;
+    MaxArgs = 5;
   }
 
   if (S.checkArgCountRange(TheCall, MinArgs, MaxArgs) ||
@@ -3348,12 +3351,12 @@ static bool CheckSamplingBuiltin(Sema &S, CallExpr *TheCall, SampleKind Kind) {
   }
 
   unsigned NextIdx = 3;
-  if (Kind == SampleKind::Bias) {
-    QualType BiasTy = TheCall->getArg(NextIdx)->getType();
-    if (!BiasTy->isFloatingType() || BiasTy->isVectorType()) {
+  if (Kind == SampleKind::Bias || Kind == SampleKind::Level) {
+    QualType BiasOrLODTy = TheCall->getArg(NextIdx)->getType();
+    if (!BiasOrLODTy->isFloatingType() || BiasOrLODTy->isVectorType()) {
       S.Diag(TheCall->getArg(NextIdx)->getBeginLoc(),
              diag::err_typecheck_convert_incompatible)
-          << BiasTy << S.Context.FloatTy << 1 << 0 << 0;
+          << BiasOrLODTy << S.Context.FloatTy << 1 << 0 << 0;
       return true;
     }
     NextIdx++;
@@ -3383,7 +3386,7 @@ static bool CheckSamplingBuiltin(Sema &S, CallExpr *TheCall, SampleKind Kind) {
   }
 
   // Clamp
-  if (TheCall->getNumArgs() > NextIdx) {
+  if (Kind != SampleKind::Level && TheCall->getNumArgs() > NextIdx) {
     QualType ClampTy = TheCall->getArg(NextIdx)->getType();
     if (!ClampTy->isFloatingType() || ClampTy->isVectorType()) {
       S.Diag(TheCall->getArg(NextIdx)->getBeginLoc(),
@@ -3475,6 +3478,8 @@ bool SemaHLSL::CheckBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
     return CheckSamplingBuiltin(SemaRef, TheCall, SampleKind::Bias);
   case Builtin::BI__builtin_hlsl_resource_sample_grad:
     return CheckSamplingBuiltin(SemaRef, TheCall, SampleKind::Grad);
+  case Builtin::BI__builtin_hlsl_resource_sample_level:
+    return CheckSamplingBuiltin(SemaRef, TheCall, SampleKind::Level);
 
   case Builtin::BI__builtin_hlsl_resource_uninitializedhandle: {
     assert(TheCall->getNumArgs() == 1 && "expected 1 arg");
