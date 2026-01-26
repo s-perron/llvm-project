@@ -3915,7 +3915,8 @@ bool SPIRVInstructionSelector::selectIntrinsic(Register ResVReg,
   case Intrinsic::spv_resource_samplebias:
   case Intrinsic::spv_resource_samplebias_clamp:
   case Intrinsic::spv_resource_samplegrad:
-  case Intrinsic::spv_resource_samplegrad_clamp: {
+  case Intrinsic::spv_resource_samplegrad_clamp:
+  case Intrinsic::spv_resource_samplelevel: {
     return selectSampleIntrinsic(ResVReg, ResType, I);
   }
   case Intrinsic::spv_resource_getpointer: {
@@ -4133,6 +4134,7 @@ bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
   std::optional<Register> ClampReg;
   std::optional<Register> DDXReg;
   std::optional<Register> DDYReg;
+  std::optional<Register> LodReg;
 
   bool IsExplicitLod = false;
 
@@ -4152,6 +4154,11 @@ bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
       OffsetReg = I.getOperand(7).getReg();
     if (I.getNumOperands() > 8)
       ClampReg = I.getOperand(8).getReg();
+  } else if (IID == Intrinsic::spv_resource_samplelevel) {
+    IsExplicitLod = true;
+    LodReg = I.getOperand(5).getReg();
+    if (I.getNumOperands() > 6)
+      OffsetReg = I.getOperand(6).getReg();
   } else {
     if (I.getNumOperands() > 5)
       OffsetReg = I.getOperand(5).getReg();
@@ -4203,6 +4210,9 @@ bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
   if (BiasReg) {
     ImageOperands |= 0x1; // Bias
   }
+  if (LodReg) {
+    ImageOperands |= 0x2; // Lod
+  }
   if (DDXReg && DDYReg) {
     ImageOperands |= 0x4; // Grad
   }
@@ -4218,6 +4228,8 @@ bool SPIRVInstructionSelector::selectSampleIntrinsic(Register &ResVReg,
     MIB.addImm(ImageOperands);
     if (ImageOperands & 0x1)
       MIB.addUse(*BiasReg);
+    if (ImageOperands & 0x2)
+      MIB.addUse(*LodReg);
     if (ImageOperands & 0x4) {
       MIB.addUse(*DDXReg);
       MIB.addUse(*DDYReg);
