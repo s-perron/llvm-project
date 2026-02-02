@@ -222,6 +222,18 @@ def int_spv_rsqrt : DefaultAttrsIntrinsic<[LLVMMatchType<0>], [llvm_anyfloat_ty]
                                llvm_float_ty, llvm_any_ty],
                               [IntrReadMem]>;
 
+  def int_spv_resource_samplecmp
+      : DefaultAttrsIntrinsic<[llvm_any_ty],
+                              [llvm_any_ty, llvm_any_ty, llvm_any_ty,
+                               llvm_float_ty, llvm_any_ty],
+                              [IntrReadMem]>;
+
+  def int_spv_resource_samplecmp_clamp
+      : DefaultAttrsIntrinsic<[llvm_any_ty],
+                              [llvm_any_ty, llvm_any_ty, llvm_any_ty,
+                               llvm_float_ty, llvm_any_ty, llvm_float_ty],
+                              [IntrReadMem]>;
+
   def int_spv_resource_getpointer
       : DefaultAttrsIntrinsic<[llvm_anyptr_ty], [llvm_any_ty, llvm_i32_ty],
                               [IntrNoMem]>;

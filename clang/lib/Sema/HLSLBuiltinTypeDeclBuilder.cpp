@@ -1476,6 +1476,77 @@ BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addSampleLevelMethods() {
       .finalize();
 }
 
+BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addSampleCmpMethods() {
+  assert(!Record->isCompleteDefinition() && "record is already complete");
+
+  ASTContext &AST = Record->getASTContext();
+  QualType ReturnType = getFirstTemplateTypeParam();
+
+  // Look up SamplerComparisonState
+  IdentifierInfo &SamplerStateII = AST.Idents.get("SamplerComparisonState");
+  LookupResult Result(SemaRef, &SamplerStateII, SourceLocation(),
+                      Sema::LookupTagName);
+  SemaRef.LookupQualifiedName(Result, Record->getDeclContext());
+  assert(!Result.empty() && "SamplerComparisonState not found");
+  QualType SamplerComparisonStateType =
+      AST.getTypeDeclType(Result.getAsSingle<TypeDecl>());
+  SemaRef.RequireCompleteType(SourceLocation(), SamplerComparisonStateType,
+                              diag::err_tentative_def_incomplete_type);
+
+  // TODO: The location type depends on the texture dimension.
+  // For Texture2D it is float2.
+  QualType FloatTy = AST.FloatTy;
+  QualType Float2Ty = AST.getExtVectorType(FloatTy, 2);
+
+  QualType IntTy = AST.IntTy;
+  QualType Int2Ty = AST.getExtVectorType(IntTy, 2);
+
+  auto *RT = SamplerComparisonStateType->getAsCXXRecordDecl();
+  assert(RT);
+  assert(!RT->field_empty());
+  FieldDecl *SamplerHandleField = *RT->field_begin();
+
+  using PH = BuiltinTypeMethodBuilder::PlaceHolder;
+
+  // T SampleCmp(SamplerComparisonState s, float2 location, float compare_value)
+  BuiltinTypeMethodBuilder(*this, "SampleCmp", ReturnType)
+      .addParam("Sampler", SamplerComparisonStateType)
+      .addParam("Location", Float2Ty)
+      .addParam("CompareValue", FloatTy)
+      .accessFieldOnResource(PH::_0, SamplerHandleField)
+      .callBuiltin("__builtin_hlsl_resource_sample_cmp", ReturnType, PH::Handle,
+                   PH::LastStmt, PH::_1, PH::_2)
+      .returnValue(PH::LastStmt)
+      .finalize();
+
+  // T SampleCmp(SamplerComparisonState s, float2 location, float compare_value,
+  // int2 offset)
+  BuiltinTypeMethodBuilder(*this, "SampleCmp", ReturnType)
+      .addParam("Sampler", SamplerComparisonStateType)
+      .addParam("Location", Float2Ty)
+      .addParam("CompareValue", FloatTy)
+      .addParam("Offset", Int2Ty)
+      .accessFieldOnResource(PH::_0, SamplerHandleField)
+      .callBuiltin("__builtin_hlsl_resource_sample_cmp", ReturnType, PH::Handle,
+                   PH::LastStmt, PH::_1, PH::_2, PH::_3)
+      .returnValue(PH::LastStmt)
+      .finalize();
+
+  // T SampleCmp(SamplerComparisonState s, float2 location, float compare_value,
+  // int2 offset, float clamp)
+  return BuiltinTypeMethodBuilder(*this, "SampleCmp", ReturnType)
+      .addParam("Sampler", SamplerComparisonStateType)
+      .addParam("Location", Float2Ty)
+      .addParam("CompareValue", FloatTy)
+      .addParam("Offset", Int2Ty)
+      .addParam("Clamp", FloatTy)
+      .accessFieldOnResource(PH::_0, SamplerHandleField)
+      .callBuiltin("__builtin_hlsl_resource_sample_cmp", ReturnType, PH::Handle,
+                   PH::LastStmt, PH::_1, PH::_2, PH::_3, PH::_4)
+      .returnValue(PH::LastStmt)
+      .finalize();
+}
+
 FieldDecl *BuiltinTypeDeclBuilder::getResourceHandleField() const {
   auto I = Fields.find("__handle");
   assert(I != Fields.end() &&

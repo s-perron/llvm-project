@@ -615,6 +615,57 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
     return Builder.CreateIntrinsic(
         RetTy, CGM.getHLSLRuntime().getSampleLevelIntrinsic(), Args);
   }
+  case Builtin::BI__builtin_hlsl_resource_sample_cmp: {
+    Value *HandleOp = EmitScalarExpr(E->getArg(0));
+    Value *SamplerOp = EmitScalarExpr(E->getArg(1));
+    Value *CoordOp = EmitScalarExpr(E->getArg(2));
+    Value *CmpOp = EmitScalarExpr(E->getArg(3));
+    if (CmpOp->getType() != Builder.getFloatTy())
+      CmpOp = Builder.CreateFPCast(CmpOp, Builder.getFloatTy());
+
+    SmallVector<Value *, 6> Args; // Max 6 arguments for SampleCmp
+    Args.push_back(HandleOp);
+    Args.push_back(SamplerOp);
+    Args.push_back(CoordOp);
+    Args.push_back(CmpOp);
+
+    // Handle optional Offset (E->getArg(4))
+    Value *OffsetOp;
+    if (E->getNumArgs() > 4) { // if E has at least 5 arguments (Handle,
+                               // Sampler, Coord, CompareValue, Offset)
+      OffsetOp = EmitScalarExpr(E->getArg(4));
+    } else {
+      // Default offset is 0.
+      llvm::Type *CoordTy = CoordOp->getType();
+      llvm::Type *Int32Ty = Builder.getInt32Ty();
+      llvm::Type *OffsetTy = Int32Ty;
+      if (auto *VT = dyn_cast<llvm::FixedVectorType>(CoordTy))
+        OffsetTy = llvm::FixedVectorType::get(Int32Ty, VT->getNumElements());
+      OffsetOp = llvm::Constant::getNullValue(OffsetTy);
+    }
+    Args.push_back(OffsetOp);
+
+    llvm::Type *RetTy = ConvertType(E->getType());
+
+    // Determine which intrinsic to call based on total number of arguments in E
+    if (E->getNumArgs() <= 5) { // No clamp parameter (Handle, Sampler, Coord,
+                                // CompareValue, Offset)
+      return Builder.CreateIntrinsic(
+          RetTy, CGM.getHLSLRuntime().getSampleCmpIntrinsic(), Args);
+    } else { // Has clamp parameter (Handle, Sampler, Coord, CompareValue,
+             // Offset, Clamp)
+      llvm::Value *Clamp =
+          EmitScalarExpr(E->getArg(5)); // Clamp is E->getArg(5)
+      // The builtin is defined with variadic arguments, so the clamp parameter
+      // might have been promoted to double. The intrinsic requires a 32-bit
+      // float.
+      if (Clamp->getType() != Builder.getFloatTy())
+        Clamp = Builder.CreateFPCast(Clamp, Builder.getFloatTy());
+      Args.push_back(Clamp);
+      return Builder.CreateIntrinsic(
+          RetTy, CGM.getHLSLRuntime().getSampleCmpClampIntrinsic(), Args);
+    }
+  }
   case Builtin::BI__builtin_hlsl_resource_load_with_status: {
     Value *HandleOp = EmitScalarExpr(E->getArg(0));
     Value *IndexOp = EmitScalarExpr(E->getArg(1));

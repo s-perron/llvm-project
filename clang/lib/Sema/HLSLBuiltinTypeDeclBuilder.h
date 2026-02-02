@@ -96,6 +96,7 @@ public:
   BuiltinTypeDeclBuilder &addSampleBiasMethods();
   BuiltinTypeDeclBuilder &addSampleGradMethods();
   BuiltinTypeDeclBuilder &addSampleLevelMethods();
+  BuiltinTypeDeclBuilder &addSampleCmpMethods();
   BuiltinTypeDeclBuilder &addIncrementCounterMethod();
   BuiltinTypeDeclBuilder &addDecrementCounterMethod();
   BuiltinTypeDeclBuilder &addHandleAccessFunction(DeclarationName &Name,

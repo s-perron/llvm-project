@@ -166,6 +166,8 @@ public:
   GENERATE_HLSL_INTRINSIC_FUNCTION(SampleGrad, resource_samplegrad)
   GENERATE_HLSL_INTRINSIC_FUNCTION(SampleGradClamp, resource_samplegrad_clamp)
   GENERATE_HLSL_INTRINSIC_FUNCTION(SampleLevel, resource_samplelevel)
+  GENERATE_HLSL_INTRINSIC_FUNCTION(SampleCmp, resource_samplecmp)
+  GENERATE_HLSL_INTRINSIC_FUNCTION(SampleCmpClamp, resource_samplecmp_clamp)
   GENERATE_HLSL_INTRINSIC_FUNCTION(CreateHandleFromBinding,
                                    resource_handlefrombinding)
   GENERATE_HLSL_INTRINSIC_FUNCTION(CreateHandleFromImplicitBinding,
