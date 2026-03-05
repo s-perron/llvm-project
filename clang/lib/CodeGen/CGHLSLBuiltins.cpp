@@ -787,8 +787,17 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
     return Builder.CreateIntrinsic(
         RetTy, CGM.getHLSLRuntime().getGatherCmpIntrinsic(), Args);
   }
-  case Builtin::BI__builtin_hlsl_resource_load_with_status:
-  case Builtin::BI__builtin_hlsl_resource_load_with_status_typed: {
+  case Builtin::BI__builtin_hlsl_check_access_fully_mapped: {
+    Value *Status = EmitScalarExpr(E->getArg(0));
+    if (CGM.getTriple().isSPIRV()) {
+      return Builder.CreateIntrinsic(
+          Builder.getInt1Ty(), llvm::Intrinsic::spv_check_access_fully_mapped,
+          {Status});
+    }
+    return Builder.CreateIsNotNull(Status, "is_mapped");
+  }
+  case Builtin::BI__builtin_hlsl_resource_load_with_status_typed:
+  case Builtin::BI__builtin_hlsl_resource_load_with_status: {
     Value *HandleOp = EmitScalarExpr(E->getArg(0));
     Value *IndexOp = EmitScalarExpr(E->getArg(1));
 
@@ -799,22 +808,35 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
     QualType HandleTy = E->getArg(0)->getType();
     const HLSLAttributedResourceType *RT =
         HandleTy->getAs<HLSLAttributedResourceType>();
-    assert(CGM.getTarget().getTriple().getArch() == llvm::Triple::dxil &&
-           "Only DXIL currently implements load with status");
 
-    Intrinsic::ID IntrID = RT->getAttrs().RawBuffer
-                               ? llvm::Intrinsic::dx_resource_load_rawbuffer
-                               : llvm::Intrinsic::dx_resource_load_typedbuffer;
+    bool IsSPIRV = CGM.getTriple().isSPIRV();
+    assert((CGM.getTarget().getTriple().getArch() == llvm::Triple::dxil ||
+            IsSPIRV) &&
+           "Only DXIL and SPIR-V currently implement load with status");
+
+    Intrinsic::ID IntrID;
+    if (IsSPIRV) {
+      IntrID = llvm::Intrinsic::spv_resource_load_typedbuffer_with_status;
+    } else {
+      IntrID = RT->getAttrs().RawBuffer
+                   ? llvm::Intrinsic::dx_resource_load_rawbuffer
+                   : llvm::Intrinsic::dx_resource_load_typedbuffer;
+    }
 
     llvm::Type *DataTy = ConvertType(E->getType());
-    llvm::Type *RetTy = llvm::StructType::get(Builder.getContext(),
-                                              {DataTy, Builder.getInt1Ty()});
+    llvm::Type *RetTy;
+    if (IsSPIRV)
+      RetTy = llvm::StructType::get(Builder.getContext(),
+                                    {Builder.getInt32Ty(), DataTy});
+    else
+      RetTy = llvm::StructType::get(Builder.getContext(),
+                                    {DataTy, Builder.getInt1Ty()});
 
     SmallVector<Value *, 3> Args;
     Args.push_back(HandleOp);
     Args.push_back(IndexOp);
 
-    if (RT->isRaw()) {
+    if (RT->isRaw() && !IsSPIRV) {
       Value *Offset = Builder.getInt32(0);
       // The offset parameter needs to be poison for ByteAddressBuffer
       if (!RT->isStructured())
@@ -826,11 +848,18 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
     // shepherd these into the return value and out reference respectively.
     Value *ResRet =
         Builder.CreateIntrinsic(RetTy, IntrID, Args, {}, "ld.struct");
-    Value *LoadedValue = Builder.CreateExtractValue(ResRet, {0}, "ld.value");
-    Value *StatusBit = Builder.CreateExtractValue(ResRet, {1}, "ld.status");
-    Value *ExtendedStatus =
-        Builder.CreateZExt(StatusBit, Builder.getInt32Ty(), "ld.status.ext");
-    Builder.CreateStore(ExtendedStatus, StatusAddr);
+    Value *LoadedValue;
+    if (IsSPIRV) {
+      Value *Status = Builder.CreateExtractValue(ResRet, {0}, "ld.status");
+      LoadedValue = Builder.CreateExtractValue(ResRet, {1}, "ld.value");
+      Builder.CreateStore(Status, StatusAddr);
+    } else {
+      LoadedValue = Builder.CreateExtractValue(ResRet, {0}, "ld.value");
+      Value *StatusBit = Builder.CreateExtractValue(ResRet, {1}, "ld.status");
+      Value *ExtendedStatus =
+          Builder.CreateZExt(StatusBit, Builder.getInt32Ty(), "ld.status.ext");
+      Builder.CreateStore(ExtendedStatus, StatusAddr);
+    }
 
     return LoadedValue;
   }

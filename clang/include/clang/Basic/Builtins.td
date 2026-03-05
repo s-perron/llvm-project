@@ -5102,6 +5102,12 @@ def HLSLResourceGatherCmp : LangBuiltin<"HLSL_LANG"> {
   let Prototype = "void(...)";
 }
 
+def HLSLCheckAccessFullyMapped : LangBuiltin<"HLSL_LANG"> {
+  let Spellings = ["__builtin_hlsl_check_access_fully_mapped"];
+  let Attributes = [NoThrow, Const];
+  let Prototype = "bool(uint32_t)";
+}
+
 def HLSLResourceUninitializedHandle : LangBuiltin<"HLSL_LANG"> {
   let Spellings = ["__builtin_hlsl_resource_uninitializedhandle"];
   let Attributes = [NoThrow];

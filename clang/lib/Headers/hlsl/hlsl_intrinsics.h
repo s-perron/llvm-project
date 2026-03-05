@@ -670,7 +670,7 @@ smoothstep(__detail::HLSL_FIXED_VECTOR<float, N> Min,
 }
 
 inline bool CheckAccessFullyMapped(uint Status) {
-  return static_cast<bool>(Status);
+  return __builtin_hlsl_check_access_fully_mapped(Status);
 }
 
 //===----------------------------------------------------------------------===//

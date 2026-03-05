@@ -310,6 +310,12 @@ def int_spv_rsqrt : DefaultAttrsIntrinsic<[LLVMMatchType<0>], [llvm_anyfloat_ty]
   def int_spv_resource_load_typedbuffer
       : DefaultAttrsIntrinsic<[llvm_any_ty], [llvm_any_ty, llvm_i32_ty]>;
 
+  def int_spv_resource_load_typedbuffer_with_status
+      : DefaultAttrsIntrinsic<[llvm_any_ty], [llvm_any_ty, llvm_i32_ty]>;
+
+  def int_spv_check_access_fully_mapped
+      : DefaultAttrsIntrinsic<[llvm_i1_ty], [llvm_i32_ty], [IntrNoMem]>;
+
   // Write a value to the image buffer. Translates directly to a single
   // OpImageWrite.
   def int_spv_resource_store_typedbuffer

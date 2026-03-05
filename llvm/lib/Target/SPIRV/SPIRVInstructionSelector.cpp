@@ -400,6 +400,11 @@ private:
                                          MachineInstr &I) const;
   bool selectGatherIntrinsic(Register &ResVReg, SPIRVTypeInst ResType,
                              MachineInstr &I) const;
+  bool selectSpvResourceLoadTypedBufferWithStatus(Register &ResVReg,
+                                                  SPIRVTypeInst ResType,
+                                                  MachineInstr &I) const;
+  bool selectSpvCheckAccessFullyMapped(Register &ResVReg, SPIRVTypeInst ResType,
+                                       MachineInstr &I) const;
   bool selectImageWriteIntrinsic(MachineInstr &I) const;
   bool selectResourceGetPointer(Register &ResVReg, SPIRVTypeInst ResType,
                                 MachineInstr &I) const;
@@ -4656,6 +4661,12 @@ bool SPIRVInstructionSelector::selectIntrinsic(Register ResVReg,
   case Intrinsic::spv_resource_gather:
   case Intrinsic::spv_resource_gather_cmp:
     return selectGatherIntrinsic(ResVReg, ResType, I);
+  case Intrinsic::spv_resource_load_typedbuffer_with_status: {
+    return selectSpvResourceLoadTypedBufferWithStatus(ResVReg, ResType, I);
+  }
+  case Intrinsic::spv_check_access_fully_mapped: {
+    return selectSpvCheckAccessFullyMapped(ResVReg, ResType, I);
+  }
   case Intrinsic::spv_resource_getpointer: {
     return selectResourceGetPointer(ResVReg, ResType, I);
   }
@@ -6332,3 +6343,137 @@ createSPIRVInstructionSelector(const SPIRVTargetMachine &TM,
   return new SPIRVInstructionSelector(TM, Subtarget, RBI);
 }
 } // namespace llvm
+
+bool SPIRVInstructionSelector::selectSpvResourceLoadTypedBufferWithStatus(
+    Register &ResVReg, SPIRVTypeInst ResType, MachineInstr &I) const {
+
+  Register ImageReg = I.getOperand(2).getReg();
+  auto *ImageDef = cast<GIntrinsic>(getVRegDef(*MRI, ImageReg));
+  Register NewImageReg = MRI->createVirtualRegister(MRI->getRegClass(ImageReg));
+  if (!loadHandleBeforePosition(NewImageReg, GR.getSPIRVTypeForVReg(ImageReg),
+                                *ImageDef, I)) {
+    return false;
+  }
+
+  Register IdxReg = I.getOperand(3).getReg();
+  MachineInstr &Pos = I;
+  DebugLoc Loc = I.getDebugLoc();
+
+  // ResType is { i32, ValueType }
+  assert(ResType->getOpcode() == SPIRV::OpTypeStruct);
+
+  // We need to inspect the ValueType (2nd member).
+  // OpTypeStruct ResultID Member0Type Member1Type ...
+  // Index 0: ResultID (Def)
+  // Index 1: Member0Type (Use)
+  // Index 2: Member1Type (Use)
+  Register ValueTypeReg = ResType->getOperand(2).getReg();
+  SPIRVTypeInst ValueType = GR.getSPIRVTypeForVReg(ValueTypeReg);
+
+  // Widen ValueType to Vec4
+  SPIRVTypeInst WidenedValueType = widenTypeToVec4(ValueType, Pos);
+
+  // Create { i32, WidenedValueType }
+  SPIRVTypeInst Int32Type = GR.getOrCreateSPIRVIntegerType(32, I, TII);
+
+  // Construct LLVM Struct Type to use getOrCreateSPIRVType(Type*, ...)
+  const Type *WidenedLLVMTy = GR.getTypeForSPIRVType(WidenedValueType);
+  LLVMContext &Ctx = I.getMF()->getFunction().getContext();
+  Type *Int32LLVMTy = Type::getInt32Ty(Ctx);
+  StructType *SparseStructLLVMTy =
+      StructType::get(Ctx, {Int32LLVMTy, const_cast<Type *>(WidenedLLVMTy)});
+
+  MachineIRBuilder MIRBuilder(I);
+  SPIRVTypeInst SparseStructType = GR.getOrCreateSPIRVType(
+      SparseStructLLVMTy, MIRBuilder, SPIRV::AccessQualifier::None, false);
+
+  Register SparseResultReg =
+      MRI->createVirtualRegister(GR.getRegClass(SparseStructType));
+
+  SPIRVTypeInst ImageType = GR.getSPIRVTypeForVReg(NewImageReg);
+  auto SampledOp = ImageType->getOperand(6);
+  bool IsFetch = (SampledOp.getImm() == 1);
+  unsigned Opcode =
+      IsFetch ? SPIRV::OpImageSparseFetch : SPIRV::OpImageSparseRead;
+
+  bool IsSignedInteger =
+      sampledTypeIsSignedInteger(GR.getTypeForSPIRVType(ImageType));
+
+  auto BMI = BuildMI(*Pos.getParent(), Pos, Loc, TII.get(Opcode))
+                 .addDef(SparseResultReg)
+                 .addUse(GR.getSPIRVTypeID(SparseStructType))
+                 .addUse(NewImageReg)
+                 .addUse(IdxReg);
+
+  if (IsSignedInteger)
+    BMI.addImm(0x1000); // SignExtend
+
+  BMI.constrainAllUses(TII, TRI, RBI);
+
+  // Now we have { i32, vec4 }. We want { i32, scalar } (potentially).
+
+  // Extract Code and Value.
+  Register CodeReg = MRI->createVirtualRegister(GR.getRegClass(Int32Type));
+  BuildMI(*Pos.getParent(), Pos, Loc, TII.get(SPIRV::OpCompositeExtract))
+      .addDef(CodeReg)
+      .addUse(GR.getSPIRVTypeID(Int32Type))
+      .addUse(SparseResultReg)
+      .addImm(0)
+      .constrainAllUses(TII, TRI, RBI);
+
+  Register VecValueReg =
+      MRI->createVirtualRegister(GR.getRegClass(WidenedValueType));
+  BuildMI(*Pos.getParent(), Pos, Loc, TII.get(SPIRV::OpCompositeExtract))
+      .addDef(VecValueReg)
+      .addUse(GR.getSPIRVTypeID(WidenedValueType))
+      .addUse(SparseResultReg)
+      .addImm(1)
+      .constrainAllUses(TII, TRI, RBI);
+
+  // Extract scalar/subvector from VecValue if needed.
+  Register FinalValueReg;
+  if (ValueType == WidenedValueType) {
+    FinalValueReg = VecValueReg;
+  } else {
+    // Need to extract.
+    uint64_t ResultSize = GR.getScalarOrVectorComponentCount(ValueType);
+    if (ResultSize == 1) {
+      FinalValueReg = MRI->createVirtualRegister(GR.getRegClass(ValueType));
+      BuildMI(*Pos.getParent(), Pos, Loc, TII.get(SPIRV::OpCompositeExtract))
+          .addDef(FinalValueReg)
+          .addUse(GR.getSPIRVTypeID(ValueType))
+          .addUse(VecValueReg)
+          .addImm(0)
+          .constrainAllUses(TII, TRI, RBI);
+    } else {
+      FinalValueReg = MRI->createVirtualRegister(GR.getRegClass(ValueType));
+      if (!extractSubvector(FinalValueReg, ValueType, VecValueReg, Pos))
+        return false;
+    }
+  }
+
+  // Reconstruct { i32, Value }
+  BuildMI(*Pos.getParent(), Pos, Loc, TII.get(SPIRV::OpCompositeConstruct))
+      .addDef(ResVReg)
+      .addUse(GR.getSPIRVTypeID(ResType))
+      .addUse(CodeReg)
+      .addUse(FinalValueReg)
+      .constrainAllUses(TII, TRI, RBI);
+
+  return true;
+}
+
+bool SPIRVInstructionSelector::selectSpvCheckAccessFullyMapped(
+    Register &ResVReg, SPIRVTypeInst ResType, MachineInstr &I) const {
+
+  Register StatusReg = I.getOperand(2).getReg();
+
+  BuildMI(*I.getParent(), I, I.getDebugLoc(),
+          TII.get(SPIRV::OpImageSparseTexelsResident))
+      .addDef(ResVReg)
+      .addUse(GR.getSPIRVTypeID(ResType))
+      .addUse(StatusReg)
+      .constrainAllUses(TII, TRI, RBI);
+
+  return true;
+}
