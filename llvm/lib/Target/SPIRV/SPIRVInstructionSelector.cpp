@@ -363,6 +363,8 @@ private:
                                  MachineInstr &I) const;
   bool selectSampleLevelIntrinsic(Register &ResVReg, SPIRVTypeInst ResType,
                                   MachineInstr &I) const;
+  bool selectLoadLevelIntrinsic(Register &ResVReg, SPIRVTypeInst ResType,
+                                MachineInstr &I) const;
   bool selectSampleCmpIntrinsic(Register &ResVReg, SPIRVTypeInst ResType,
                                 MachineInstr &I) const;
   bool selectSampleCmpLevelZeroIntrinsic(Register &ResVReg,
@@ -421,7 +423,8 @@ private:
                         Register &ReadReg, MachineInstr &InsertionPoint) const;
   bool generateImageReadOrFetch(Register &ResVReg, SPIRVTypeInst ResType,
                                 Register ImageReg, Register IdxReg,
-                                DebugLoc Loc, MachineInstr &Pos) const;
+                                DebugLoc Loc, MachineInstr &Pos,
+                                const ImageOperands *ImOps = nullptr) const;
   bool generateSampleImage(Register ResVReg, SPIRVTypeInst ResType,
                            Register ImageReg, Register SamplerReg,
                            Register CoordinateReg, const ImageOperands &ImOps,
@@ -4287,6 +4290,9 @@ bool SPIRVInstructionSelector::selectIntrinsic(Register ResVReg,
   case Intrinsic::spv_resource_load_typedbuffer: {
     return selectReadImageIntrinsic(ResVReg, ResType, I);
   }
+  case Intrinsic::spv_resource_load_level: {
+    return selectLoadLevelIntrinsic(ResVReg, ResType, I);
+  }
   case Intrinsic::spv_resource_sample:
   case Intrinsic::spv_resource_sample_clamp:
     return selectSampleBasicIntrinsic(ResVReg, ResType, I);
@@ -4662,6 +4668,32 @@ bool SPIRVInstructionSelector::selectSampleCmpIntrinsic(Register &ResVReg,
                              CoordinateReg, ImOps, I.getDebugLoc(), I);
 }
 
+bool SPIRVInstructionSelector::selectLoadLevelIntrinsic(Register &ResVReg,
+                                                        SPIRVTypeInst ResType,
+                                                        MachineInstr &I) const {
+  Register ImageReg = I.getOperand(2).getReg();
+  Register CoordinateReg = I.getOperand(3).getReg();
+  Register LodReg = I.getOperand(4).getReg();
+
+  ImageOperands ImOps;
+  ImOps.Lod = LodReg;
+  if (I.getNumOperands() > 5)
+    ImOps.Offset = I.getOperand(5).getReg();
+
+  auto *ImageDef = dyn_cast<GIntrinsic>(getVRegDef(*MRI, ImageReg));
+  if (!ImageDef)
+    return false;
+
+  Register NewImageReg = MRI->createVirtualRegister(MRI->getRegClass(ImageReg));
+  if (!loadHandleBeforePosition(NewImageReg, GR.getSPIRVTypeForVReg(ImageReg),
+                                *ImageDef, I)) {
+    return false;
+  }
+
+  return generateImageReadOrFetch(ResVReg, ResType, NewImageReg, CoordinateReg,
+                                  I.getDebugLoc(), I, &ImOps);
+}
+
 bool SPIRVInstructionSelector::selectSampleCmpLevelZeroIntrinsic(
     Register &ResVReg, SPIRVTypeInst ResType, MachineInstr &I) const {
   Register ImageReg = I.getOperand(2).getReg();
@@ -4766,7 +4798,8 @@ bool SPIRVInstructionSelector::selectGatherIntrinsic(Register &ResVReg,
 
 bool SPIRVInstructionSelector::generateImageReadOrFetch(
     Register &ResVReg, SPIRVTypeInst ResType, Register ImageReg,
-    Register IdxReg, DebugLoc Loc, MachineInstr &Pos) const {
+    Register IdxReg, DebugLoc Loc, MachineInstr &Pos,
+    const ImageOperands *ImOps) const {
   SPIRVTypeInst ImageType = GR.getSPIRVTypeForVReg(ImageReg);
   assert(ImageType && ImageType->getOpcode() == SPIRV::OpTypeImage &&
          "ImageReg is not an image type.");
@@ -4778,6 +4811,35 @@ bool SPIRVInstructionSelector::generateImageReadOrFetch(
   auto SampledOp = ImageType->getOperand(6);
   bool IsFetch = (SampledOp.getImm() == 1);
 
+  auto AddOperands = [&](MachineInstrBuilder &MIB) {
+    uint32_t ImageOperandsMask = 0;
+    if (IsSignedInteger)
+      ImageOperandsMask |= 0x1000; // SignExtend
+
+    if (IsFetch && ImOps) {
+      if (ImOps->Lod)
+        ImageOperandsMask |= SPIRV::ImageOperand::Lod;
+      if (ImOps->Offset && !isScalarOrVectorIntConstantZero(*ImOps->Offset)) {
+        if (isConstReg(MRI, *ImOps->Offset))
+          ImageOperandsMask |= SPIRV::ImageOperand::ConstOffset;
+        else
+          ImageOperandsMask |= SPIRV::ImageOperand::Offset;
+      }
+    }
+
+    if (ImageOperandsMask != 0) {
+      MIB.addImm(ImageOperandsMask);
+      if (IsFetch && ImOps) {
+        if (ImOps->Lod)
+          MIB.addUse(*ImOps->Lod);
+        if (ImOps->Offset &&
+            (ImageOperandsMask &
+             (SPIRV::ImageOperand::Offset | SPIRV::ImageOperand::ConstOffset)))
+          MIB.addUse(*ImOps->Offset);
+      }
+    }
+  };
+
   uint64_t ResultSize = GR.getScalarOrVectorComponentCount(ResType);
   if (ResultSize == 4) {
     auto BMI =
@@ -4788,8 +4850,7 @@ bool SPIRVInstructionSelector::generateImageReadOrFetch(
             .addUse(ImageReg)
             .addUse(IdxReg);
 
-    if (IsSignedInteger)
-      BMI.addImm(0x1000); // SignExtend
+    AddOperands(BMI);
     BMI.constrainAllUses(TII, TRI, RBI);
     return true;
   }
@@ -4803,8 +4864,7 @@ bool SPIRVInstructionSelector::generateImageReadOrFetch(
           .addUse(GR.getSPIRVTypeID(ReadType))
           .addUse(ImageReg)
           .addUse(IdxReg);
-  if (IsSignedInteger)
-    BMI.addImm(0x1000); // SignExtend
+  AddOperands(BMI);
   BMI.constrainAllUses(TII, TRI, RBI);
 
   if (ResultSize == 1) {
