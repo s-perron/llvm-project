@@ -816,6 +816,8 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
 
     Intrinsic::ID IntrID;
     if (IsSPIRV) {
+      assert(!RT->getAttrs().RawBuffer &&
+             "Raw buffers do not support load with status");
       IntrID = llvm::Intrinsic::spv_resource_load_typedbuffer_with_status;
     } else {
       IntrID = RT->getAttrs().RawBuffer

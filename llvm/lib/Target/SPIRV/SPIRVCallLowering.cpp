@@ -675,7 +675,6 @@ bool SPIRVCallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
                        *ST->getRegBankInfo());
   return true;
 }
-/*
 bool SPIRVCallLowering::lowerIntrinsicCall(MachineIRBuilder &MIRBuilder,
                                            const CallInst &Call,
                                            ArrayRef<Register> ResRegs,
@@ -715,4 +714,3 @@ bool SPIRVCallLowering::lowerIntrinsicCall(MachineIRBuilder &MIRBuilder,
   }
   return false;
 }
-*/

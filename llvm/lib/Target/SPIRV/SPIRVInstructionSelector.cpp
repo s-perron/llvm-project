@@ -6378,6 +6378,7 @@ bool SPIRVInstructionSelector::selectSpvResourceLoadTypedBufferWithStatus(
 
   // Construct LLVM Struct Type to use getOrCreateSPIRVType(Type*, ...)
   const Type *WidenedLLVMTy = GR.getTypeForSPIRVType(WidenedValueType);
+  assert(WidenedLLVMTy && "Failed to get LLVM type for widened SPIR-V type");
   LLVMContext &Ctx = I.getMF()->getFunction().getContext();
   Type *Int32LLVMTy = Type::getInt32Ty(Ctx);
   StructType *SparseStructLLVMTy =

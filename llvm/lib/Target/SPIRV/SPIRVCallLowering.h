@@ -53,6 +53,10 @@ public:
   // Build OpCall, or replace with a builtin function.
   bool lowerCall(MachineIRBuilder &MIRBuilder,
                  CallLoweringInfo &Info) const override;
+
+  bool lowerIntrinsicCall(MachineIRBuilder &MIRBuilder, const CallInst &Call,
+                          ArrayRef<Register> ResRegs,
+                          FunctionLoweringInfo &FLI) const override;
 };
 } // end namespace llvm
 
