@@ -1754,6 +1754,20 @@ static bool isFirstIndexZero(const GetElementPtrInst *GEP) {
 }
 
 Instruction *SPIRVEmitIntrinsics::visitIntrinsicInst(IntrinsicInst &I) {
+  if (I.getIntrinsicID() == Intrinsic::spv_resource_load_typedbuffer_with_status) {
+    if (I.getType()->isAggregateType()) {
+      IRBuilder<> B(I.getParent());
+      B.SetInsertPoint(&I);
+      SmallVector<Type *> Types;
+      Types.push_back(B.getInt32Ty());
+      Types.push_back(I.getOperand(0)->getType());
+      SmallVector<Value *> Args(I.args());
+      auto *NewI = B.CreateIntrinsic(I.getIntrinsicID(), Types, Args);
+      replaceMemInstrUses(&I, NewI, B);
+      return NewI;
+    }
+  }
+
   auto *SGEP = dyn_cast<StructuredGEPInst>(&I);
   if (!SGEP)
     return &I;

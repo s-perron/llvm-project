@@ -5,19 +5,22 @@
 ; CHECK-DAG: [[TypeInt:%[0-9]+]] = OpTypeInt 32 0
 ; CHECK-DAG: [[TypeBool:%[0-9]+]] = OpTypeBool
 ; CHECK-DAG: [[TypeFloat:%[0-9]+]] = OpTypeFloat 32
-; CHECK-DAG: [[TypeImage:%[0-9]+]] = OpTypeImage [[TypeFloat]] Buffer 2 0 0 2 Unknown
-; CHECK-DAG: [[TypeSparseVecStruct:%[0-9]+]] = OpTypeStruct [[TypeInt]] %[[#]]
+; CHECK-DAG: [[TypeImage:%[0-9]+]] = OpTypeImage [[TypeFloat]] Buffer 2 0 0 2 R32f
+; CHECK-DAG: [[TypeFloatVec:%[0-9]+]] = OpTypeVector [[TypeFloat]] 4
+; CHECK-DAG: [[TypeSparseVecStruct:%[0-9]+]] = OpTypeStruct [[TypeInt]] [[TypeFloatVec]]
 
 ; CHECK: [[Handle:%[0-9]+]] = OpLoad [[TypeImage]]
 ; CHECK: [[SparseResult:%[0-9]+]] = OpImageSparseRead [[TypeSparseVecStruct]] [[Handle]] %[[#]]
 ; CHECK: [[ResCode:%[0-9]+]] = OpCompositeExtract [[TypeInt]] [[SparseResult]] 0
 ; CHECK: [[ResVec:%[0-9]+]] = OpCompositeExtract %[[#]] [[SparseResult]] 1
 ; CHECK: [[ResVal:%[0-9]+]] = OpCompositeExtract [[TypeFloat]] [[ResVec]] 0
-; CHECK: [[IsResident:%[0-9]+]] = OpImageSparseTexelsResident [[TypeBool]] [[ResCode]]
+; CHECK: [[IsResident:%[0-9]+]] = OpImageSparseTexelsResident [[TypeBool]] %[[#]]
+
+@.str = private unnamed_addr constant [15 x i8] c"MySparseBuffer\00", align 1
 
 define void @main(i32 noundef %idx) {
 entry:
-  %0 = tail call target("spirv.Image", float, 5, 2, 0, 0, 2, 3) @llvm.spv.resource.handlefromimplicitbinding.tspirv.Image_f32_5_2_0_0_2_3t(i32 0, i32 0, i32 1, i32 0, ptr null)
+  %0 = tail call target("spirv.Image", float, 5, 2, 0, 0, 2, 3) @llvm.spv.resource.handlefromimplicitbinding.tspirv.Image_f32_5_2_0_0_2_3t(i32 0, i32 0, i32 1, i32 0, ptr @.str)
   %ld.struct = call { i32, float } @llvm.spv.resource.load.typedbuffer.with.status.sl_i32f32s.tspirv.Image_f32_5_2_0_0_2_3t(target("spirv.Image", float, 5, 2, 0, 0, 2, 3) %0, i32 %idx)
   %status = extractvalue { i32, float } %ld.struct, 0
   %val = extractvalue { i32, float } %ld.struct, 1

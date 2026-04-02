@@ -965,7 +965,8 @@ void RequirementHandler::initAvailableCapabilitiesForVulkan(
                     Capability::StorageImageArrayDynamicIndexing,
                     Capability::DerivativeControl, Capability::MinLod,
                     Capability::ImageQuery, Capability::ImageGatherExtended,
-                    Capability::Addresses, Capability::VulkanMemoryModelKHR});
+                    Capability::Addresses, Capability::VulkanMemoryModelKHR,
+                    Capability::SparseResidency});
 
   // Became core in Vulkan 1.2
   if (ST.isAtLeastSPIRVVer(VersionTuple(1, 5))) {
@@ -2251,6 +2252,14 @@ void addInstrRequirements(const MachineInstr &MI,
   case SPIRV::OpImageGather:
     Reqs.addCapability(SPIRV::Capability::Shader);
     addImageOperandReqs(MI, Reqs, ST, 5);
+    break;
+  case SPIRV::OpImageSparseRead:
+  case SPIRV::OpImageSparseFetch:
+    Reqs.addCapability(SPIRV::Capability::SparseResidency);
+    addImageOperandReqs(MI, Reqs, ST, 4);
+    break;
+  case SPIRV::OpImageSparseTexelsResident:
+    Reqs.addCapability(SPIRV::Capability::SparseResidency);
     break;
   case SPIRV::OpImageRead: {
     Register ImageReg = MI.getOperand(2).getReg();

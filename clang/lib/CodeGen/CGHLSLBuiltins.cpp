@@ -796,8 +796,8 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
     }
     return Builder.CreateIsNotNull(Status, "is_mapped");
   }
-  case Builtin::BI__builtin_hlsl_resource_load_with_status_typed:
-  case Builtin::BI__builtin_hlsl_resource_load_with_status: {
+  case Builtin::BI__builtin_hlsl_resource_load_with_status:
+  case Builtin::BI__builtin_hlsl_resource_load_with_status_typed: {
     Value *HandleOp = EmitScalarExpr(E->getArg(0));
     Value *IndexOp = EmitScalarExpr(E->getArg(1));
 
