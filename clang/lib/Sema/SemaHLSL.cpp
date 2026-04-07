@@ -4542,6 +4542,22 @@ static void BuildFlattenedTypeList(QualType BaseTy,
   }
 }
 
+bool SemaHLSL::IsConstantBufferElementCompatible(clang::QualType QT) {
+  if (QT.isNull())
+    return false;
+
+  // Must be a class/struct.
+  const auto *RD = QT->getAsCXXRecordDecl();
+  if (!RD || RD->isUnion())
+    return false;
+
+  // Cannot be a resource type or contain one.
+  if (QT->isHLSLIntangibleType())
+    return false;
+
+  return true;
+}
+
 bool SemaHLSL::IsTypedResourceElementCompatible(clang::QualType QT) {
   // null and array types are not allowed.
   if (QT.isNull() || QT->isArrayType())
@@ -4865,6 +4881,8 @@ static bool hasConstantBufferLayout(QualType QT) {
     return false;
 
   if (const auto *RD = Ty->getAsCXXRecordDecl()) {
+    if (RD->isImplicit())
+      return false;
     for (const auto *FD : RD->fields()) {
       if (hasConstantBufferLayout(FD->getType()))
         return true;

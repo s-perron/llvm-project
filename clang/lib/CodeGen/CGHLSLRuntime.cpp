@@ -1661,3 +1661,43 @@ LValue CGHLSLRuntime::emitBufferMemberExpr(CodeGenFunction &CGF,
 
   return LV;
 }
+
+std::optional<LValue>
+CGHLSLRuntime::emitConstantBufferDerivedToBase(const CastExpr *E,
+                                               CodeGenFunction &CGF) {
+  auto *DerivedClassDecl = E->getSubExpr()->getType()->getAsCXXRecordDecl();
+  if (!DerivedClassDecl || DerivedClassDecl->getName() != "ConstantBuffer")
+    return std::nullopt;
+
+  LValue BaseLV = CGF.EmitLValue(E->getSubExpr());
+
+  // Find the __handle field
+  const FieldDecl *HandleField = nullptr;
+  for (auto *FD : DerivedClassDecl->fields()) {
+    if (FD->getName() == "__handle") {
+      HandleField = FD;
+      break;
+    }
+  }
+  assert(HandleField && "ConstantBuffer must have a __handle field");
+
+  LValue HandleLV = CGF.EmitLValueForField(BaseLV, HandleField);
+  llvm::Value *Handle =
+      CGF.EmitLoadOfScalar(HandleLV, HandleField->getLocation());
+
+  // Call the appropriate intrinsic (dx.resource.getpointer)
+  llvm::Type *RetTy = llvm::PointerType::get(
+      CGM.getLLVMContext(),
+      CGM.getContext().getTargetAddressSpace(LangAS::hlsl_constant));
+  llvm::Type *Int32Ty = llvm::Type::getInt32Ty(CGM.getLLVMContext());
+  Constant *Zero = ConstantInt::get(Int32Ty, 0);
+
+  llvm::Value *Ptr = nullptr;
+  Ptr = CGF.Builder.CreateIntrinsic(
+      RetTy, CGM.getHLSLRuntime().getCreateResourceGetPointerIntrinsic(),
+      ArrayRef<Value *>{Handle, Zero});
+
+  Address ResultAddr(Ptr, CGM.getTypes().ConvertTypeForMem(E->getType()),
+                     CGM.getContext().getTypeAlignInChars(E->getType()));
+  return CGF.MakeAddrLValue(ResultAddr, E->getType());
+}

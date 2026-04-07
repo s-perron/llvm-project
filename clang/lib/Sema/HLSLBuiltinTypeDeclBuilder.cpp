@@ -1055,6 +1055,15 @@ BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addSamplerHandle() {
   return *this;
 }
 
+BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addBaseClass(QualType Ty) {
+  ASTContext &AST = SemaRef.getASTContext();
+  TypeSourceInfo *TSI = AST.getTrivialTypeSourceInfo(Ty);
+  CXXBaseSpecifier *Base = new (AST) CXXBaseSpecifier(
+      SourceRange(), false, false, AS_public, TSI, SourceLocation());
+  Record->setBases(&Base, 1);
+  return *this;
+}
+
 BuiltinTypeDeclBuilder &
 BuiltinTypeDeclBuilder::addFriend(CXXRecordDecl *Friend) {
   assert(!Record->isCompleteDefinition() && "record is already complete");

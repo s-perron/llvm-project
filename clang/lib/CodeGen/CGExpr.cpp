@@ -6216,6 +6216,11 @@ LValue CodeGenFunction::EmitCastLValue(const CastExpr *E) {
 
   case CK_UncheckedDerivedToBase:
   case CK_DerivedToBase: {
+    if (getLangOpts().HLSL) {
+      if (std::optional<LValue> ResLV =
+              CGM.getHLSLRuntime().emitConstantBufferDerivedToBase(E, *this))
+        return *ResLV;
+    }
     auto *DerivedClassDecl = E->getSubExpr()->getType()->castAsCXXRecordDecl();
     LValue LV = EmitLValue(E->getSubExpr());
     Address This = LV.getAddress();
