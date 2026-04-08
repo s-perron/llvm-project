@@ -228,6 +228,8 @@ public:
   template <typename TLHS, typename TRHS>
   BuiltinTypeMethodBuilder &assign(TLHS LHS, TRHS RHS);
   template <typename T> BuiltinTypeMethodBuilder &dereference(T Ptr);
+  template <typename T>
+  BuiltinTypeMethodBuilder &cstyleCast(T Val, QualType ResultTy);
   template <typename V, typename S>
   BuiltinTypeMethodBuilder &concat(V Vec, S Scalar, QualType ResultTy);
 
@@ -554,6 +556,11 @@ void BuiltinTypeMethodBuilder::createDecl() {
         AST, DeclBuilder.Record, SourceLocation(), NameInfo, FuncTy, TSInfo,
         ExplicitSpecifier(), false, /*IsInline=*/true, false,
         ConstexprSpecKind::Unspecified);
+  else if (Name.getNameKind() == DeclarationName::CXXConversionFunctionName)
+    Method = CXXConversionDecl::Create(
+        AST, DeclBuilder.Record, SourceLocation(), NameInfo, FuncTy, TSInfo,
+        false, /*isInline=*/true, ExplicitSpecifier(),
+        ConstexprSpecKind::Unspecified, SourceLocation());
   else
     Method = CXXMethodDecl::Create(
         AST, DeclBuilder.Record, SourceLocation(), NameInfo, FuncTy, TSInfo, SC,
@@ -726,6 +733,19 @@ BuiltinTypeMethodBuilder &BuiltinTypeMethodBuilder::dereference(T Ptr) {
                             VK_LValue, OK_Ordinary, SourceLocation(),
                             /*CanOverflow=*/false, FPOptionsOverride());
   StmtsList.push_back(Deref);
+  return *this;
+}
+
+template <typename T>
+BuiltinTypeMethodBuilder &
+BuiltinTypeMethodBuilder::cstyleCast(T Val, QualType ResultTy) {
+  Expr *ValExpr = convertPlaceholder(Val);
+  ExprResult Cast = DeclBuilder.SemaRef.BuildCStyleCastExpr(
+      SourceLocation(),
+      DeclBuilder.SemaRef.getASTContext().getTrivialTypeSourceInfo(ResultTy),
+      SourceLocation(), ValExpr);
+  assert(!Cast.isInvalid() && "Cast cannot fail!");
+  StmtsList.push_back(Cast.get());
   return *this;
 }
 
@@ -1053,6 +1073,30 @@ BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addSamplerHandle() {
   addHandleMember(ResourceClass::Sampler, ResourceDimension::Unknown,
                   /*IsROV=*/false, /*RawBuffer=*/false, getHandleElementType());
   return *this;
+}
+
+BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addConversionToType() {
+  assert(!Record->isCompleteDefinition() && "record is already complete");
+  ASTContext &AST = SemaRef.getASTContext();
+  using PH = BuiltinTypeMethodBuilder::PlaceHolder;
+
+  QualType ElemTy = getHandleElementType();
+  QualType ReturnTy = AST.getLValueReferenceType(ElemTy);
+
+  DeclarationName Name = AST.DeclarationNames.getCXXConversionFunctionName(
+      AST.getCanonicalType(ReturnTy));
+
+  QualType AddrSpaceElemTy =
+      AST.getAddrSpaceQualType(ElemTy, LangAS::hlsl_constant);
+
+  return BuiltinTypeMethodBuilder(*this, Name, ReturnTy, /*IsConst=*/true)
+      .callBuiltin("__builtin_hlsl_resource_getpointer",
+                   AST.getPointerType(AddrSpaceElemTy), PH::Handle,
+                   getConstantIntExpr(0))
+      .dereference(PH::LastStmt)
+      .cstyleCast(PH::LastStmt, ReturnTy)
+      .returnValue(PH::LastStmt)
+      .finalize();
 }
 
 BuiltinTypeDeclBuilder &
