@@ -899,7 +899,7 @@ BuiltinTypeMethodBuilder &BuiltinTypeMethodBuilder::returnValue(T ReturnValue) {
   ASTContext &AST = DeclBuilder.SemaRef.getASTContext();
 
   QualType Ty = ReturnValueExpr->getType();
-  if (Ty->isRecordType()) {
+  if (Ty->isRecordType() && !Method->getReturnType()->isReferenceType()) {
     // For record types, create a call to copy constructor to ensure proper copy
     // semantics.
     auto *ICE =
@@ -1081,20 +1081,36 @@ BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addConversionToType() {
   using PH = BuiltinTypeMethodBuilder::PlaceHolder;
 
   QualType ElemTy = getHandleElementType();
-  QualType ReturnTy = AST.getLValueReferenceType(ElemTy);
-
-  DeclarationName Name = AST.DeclarationNames.getCXXConversionFunctionName(
-      AST.getCanonicalType(ReturnTy));
-
   QualType AddrSpaceElemTy =
-      AST.getAddrSpaceQualType(ElemTy, LangAS::hlsl_constant);
+      AST.getCanonicalType(AST.getAddrSpaceQualType(ElemTy, LangAS::hlsl_constant));
+  QualType ReturnTy = AST.getCanonicalType(AST.getLValueReferenceType(AddrSpaceElemTy.withConst()));
+
+  DeclarationName Name = AST.DeclarationNames.getCXXConversionFunctionName(AST.getCanonicalType(ReturnTy));
 
   return BuiltinTypeMethodBuilder(*this, Name, ReturnTy, /*IsConst=*/true)
       .callBuiltin("__builtin_hlsl_resource_getpointer",
-                   AST.getPointerType(AddrSpaceElemTy), PH::Handle,
-                   getConstantIntExpr(0))
+                   AST.getPointerType(AddrSpaceElemTy), PH::Handle)
       .dereference(PH::LastStmt)
-      .cstyleCast(PH::LastStmt, ReturnTy)
+      .returnValue(PH::LastStmt)
+      .finalize();
+}
+
+BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addConversionToTypeByValue() {
+  assert(!Record->isCompleteDefinition() && "record is already complete");
+  ASTContext &AST = SemaRef.getASTContext();
+  using PH = BuiltinTypeMethodBuilder::PlaceHolder;
+
+  QualType ElemTy = AST.getCanonicalType(getHandleElementType());
+
+  DeclarationName Name = AST.DeclarationNames.getCXXConversionFunctionName(AST.getCanonicalType(ElemTy));
+
+  QualType AddrSpaceElemTy =
+      AST.getCanonicalType(AST.getAddrSpaceQualType(ElemTy, LangAS::hlsl_constant));
+
+  return BuiltinTypeMethodBuilder(*this, Name, ElemTy, /*IsConst=*/true)
+      .callBuiltin("__builtin_hlsl_resource_getpointer",
+                   AST.getPointerType(AddrSpaceElemTy), PH::Handle)
+      .dereference(PH::LastStmt)
       .returnValue(PH::LastStmt)
       .finalize();
 }

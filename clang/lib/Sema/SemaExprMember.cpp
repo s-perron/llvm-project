@@ -1250,9 +1250,10 @@ static ExprResult LookupMemberExpr(Sema &S, LookupResult &R,
             QualType InnerType = CTSD->getTemplateArgs()[0].getAsType();
             // Ensure we have the canonical type and strip any references just in case
             QualType CanonType = InnerType.getCanonicalType().getNonReferenceType();
-            QualType RefType = S.Context.getLValueReferenceType(CanonType);
+            QualType AddrSpaceType = S.Context.getAddrSpaceQualType(CanonType, LangAS::hlsl_constant);
+            QualType RefType = S.Context.getLValueReferenceType(AddrSpaceType.withConst());
             
-            DeclarationName ConvName = S.Context.DeclarationNames.getCXXConversionFunctionName(S.Context.getCanonicalType(RefType));
+            DeclarationName ConvName = S.Context.DeclarationNames.getCXXConversionFunctionName(S.Context.getCanonicalType(CanonType));
             LookupResult ConvR(S, ConvName, OpLoc, Sema::LookupOrdinaryName);
             if (S.LookupQualifiedName(ConvR, RD)) {
               CXXConversionDecl *ConvDecl = nullptr;

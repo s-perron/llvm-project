@@ -3841,9 +3841,9 @@ bool SemaHLSL::CheckBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall) {
     break;
   }
   case Builtin::BI__builtin_hlsl_resource_getpointer: {
-    if (SemaRef.checkArgCount(TheCall, 2) ||
+    if (SemaRef.checkArgCountRange(TheCall, 1, 2) ||
         CheckResourceHandle(&SemaRef, TheCall, 0) ||
-        CheckIndexType(&SemaRef, TheCall, 1))
+        (TheCall->getNumArgs() == 2 && CheckIndexType(&SemaRef, TheCall, 1)))
       return true;
 
     auto *ResourceTy =

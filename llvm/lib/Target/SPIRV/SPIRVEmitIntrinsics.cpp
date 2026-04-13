@@ -391,6 +391,7 @@ bool expectIgnoredInIRTranslation(const Instruction *I) {
   switch (II->getIntrinsicID()) {
   case Intrinsic::invariant_start:
   case Intrinsic::spv_resource_handlefrombinding:
+  case Intrinsic::spv_resource_getbasepointer:
   case Intrinsic::spv_resource_getpointer:
     return true;
   default:
@@ -966,7 +967,8 @@ Type *SPIRVEmitIntrinsics::deduceElementTypeHelper(
     // TODO: maybe improve performance by caching demangled names
 
     auto *II = dyn_cast<IntrinsicInst>(I);
-    if (II && II->getIntrinsicID() == Intrinsic::spv_resource_getpointer) {
+    if (II && (II->getIntrinsicID() == Intrinsic::spv_resource_getbasepointer ||
+               II->getIntrinsicID() == Intrinsic::spv_resource_getpointer)) {
       auto *HandleType = cast<TargetExtType>(II->getOperand(0)->getType());
       if (HandleType->getTargetExtName() == "spirv.Image" ||
           HandleType->getTargetExtName() == "spirv.SignedImage") {

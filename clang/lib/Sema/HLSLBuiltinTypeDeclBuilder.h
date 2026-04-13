@@ -84,6 +84,7 @@ public:
                    AccessSpecifier Access = AccessSpecifier::AS_private);
   BuiltinTypeDeclBuilder &addSamplerHandle();
   BuiltinTypeDeclBuilder &addConversionToType();
+  BuiltinTypeDeclBuilder &addConversionToTypeByValue();
   BuiltinTypeDeclBuilder &addArraySubscriptOperators(
       ResourceDimension Dim = ResourceDimension::Unknown);
 

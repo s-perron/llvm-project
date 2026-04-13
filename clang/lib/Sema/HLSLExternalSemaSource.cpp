@@ -513,7 +513,8 @@ void HLSLExternalSemaSource::defineHLSLTypesWithForwardDeclarations() {
   onCompletion(Decl, [this](CXXRecordDecl *Decl) {
     setupBufferType(Decl, *SemaPtr, ResourceClass::CBuffer, /*IsROV=*/false,
                     /*RawBuffer=*/false, /*HasCounter=*/false)
-        .addConversionToType()
+        //.addConversionToType()
+        .addConversionToTypeByValue()
         .completeDefinition();
   });
 
