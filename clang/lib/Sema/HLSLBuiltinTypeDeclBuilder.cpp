@@ -1083,7 +1083,7 @@ BuiltinTypeDeclBuilder &BuiltinTypeDeclBuilder::addConversionToType() {
   QualType ElemTy = getHandleElementType();
   QualType AddrSpaceElemTy =
       AST.getCanonicalType(AST.getAddrSpaceQualType(ElemTy, LangAS::hlsl_constant));
-  QualType ReturnTy = AST.getCanonicalType(AST.getLValueReferenceType(AddrSpaceElemTy.withConst()));
+  QualType ReturnTy = AST.getCanonicalType(AST.getLValueReferenceType(AddrSpaceElemTy));
 
   DeclarationName Name = AST.DeclarationNames.getCXXConversionFunctionName(AST.getCanonicalType(ReturnTy));
 

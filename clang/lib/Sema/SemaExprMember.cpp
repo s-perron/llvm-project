@@ -1244,14 +1244,14 @@ static ExprResult LookupMemberExpr(Sema &S, LookupResult &R,
   // HLSL: Intercept member accesses on ConstantBuffer<T>
   if (S.getLangOpts().HLSL) {
     if (auto *RD = BaseType->getAsCXXRecordDecl()) {
-      if (RD->getName() == "ConstantBuffer" && RD->isImplicit()) {
+      if (RD->getName() == "ConstantBuffer") {
         if (auto *CTSD = dyn_cast<ClassTemplateSpecializationDecl>(RD)) {
           if (CTSD->getTemplateArgs().size() > 0) {
             QualType InnerType = CTSD->getTemplateArgs()[0].getAsType();
             // Ensure we have the canonical type and strip any references just in case
             QualType CanonType = InnerType.getCanonicalType().getNonReferenceType();
             QualType AddrSpaceType = S.Context.getCanonicalType(S.Context.getAddrSpaceQualType(CanonType, LangAS::hlsl_constant));
-            QualType ReturnTy = S.Context.getCanonicalType(S.Context.getLValueReferenceType(AddrSpaceType.withConst()));
+            QualType ReturnTy = S.Context.getCanonicalType(S.Context.getLValueReferenceType(AddrSpaceType));
             
             DeclarationName ConvName = S.Context.DeclarationNames.getCXXConversionFunctionName(CanQualType::CreateUnsafe(ReturnTy));
             LookupResult ConvR(S, ConvName, OpLoc, Sema::LookupOrdinaryName);

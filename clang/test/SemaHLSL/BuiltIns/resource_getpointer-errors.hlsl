@@ -8,7 +8,7 @@ void test_args(unsigned int x) {
   // expected-error@+1 {{used type 'unsigned int' where __hlsl_resource_t is required}}
   __builtin_hlsl_resource_getpointer(x);
 
-  // expected-error@+1 {{too many arguments to function call, expected 2, have 3}}
+  // expected-error@+1 {{too many arguments to function call, expected at most 2, have 3}}
   __builtin_hlsl_resource_getpointer(x, x, x);
 
   // expected-error@+1 {{used type 'unsigned int' where __hlsl_resource_t is required}}
