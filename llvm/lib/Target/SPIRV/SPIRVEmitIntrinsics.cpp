@@ -980,12 +980,14 @@ Type *SPIRVEmitIntrinsics::deduceElementTypeHelper(
       } else if (HandleType->getTargetExtName() == "spirv.VulkanBuffer") {
         // This call is supposed to index into an array
         Ty = HandleType->getTypeParameter(0);
-        if (Ty->isArrayTy())
-          Ty = Ty->getArrayElementType();
-        else {
-          assert(Ty && Ty->isStructTy());
-          uint32_t Index = cast<ConstantInt>(II->getOperand(1))->getZExtValue();
-          Ty = cast<StructType>(Ty)->getElementType(Index);
+        if (II->getIntrinsicID() == Intrinsic::spv_resource_getpointer) {
+          if (Ty->isArrayTy())
+            Ty = Ty->getArrayElementType();
+          else {
+            assert(Ty && Ty->isStructTy());
+            uint32_t Index = cast<ConstantInt>(II->getOperand(1))->getZExtValue();
+            Ty = cast<StructType>(Ty)->getElementType(Index);
+          }
         }
         Ty = reconstitutePeeledArrayType(Ty);
       } else {

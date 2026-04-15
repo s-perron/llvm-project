@@ -583,6 +583,10 @@ Value *CodeGenFunction::EmitHLSLBuiltinExpr(unsigned BuiltinID,
           RetTy, CGM.getHLSLRuntime().getCreateResourceGetPointerIntrinsic(),
           ArrayRef<Value *>{HandleOp, IndexOp});
     }
+    llvm::dbgs() << "Building getbasepointer with return type ";
+    RetTy->dump();
+    llvm::dbgs() << "Built from expression ";
+    E->dump();
     return Builder.CreateIntrinsic(
         RetTy, CGM.getHLSLRuntime().getCreateResourceGetBasePointerIntrinsic(),
         ArrayRef<Value *>{HandleOp});
